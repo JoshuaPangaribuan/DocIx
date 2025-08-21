@@ -1,0 +1,191 @@
+# Custom network definition for services in Docker Compose.
+# This network allows containers to communicate with each other.
+# Docker Compose Networks Documentation: https://docs.docker.com/compose/networking/
+networks:
+  docIx:
+    driver: bridge
+
+# Volume definitions for persistent data storage.
+# esdata01, esdata02, esdata03 are used by Elasticsearch to store index data.
+# kibanadata is used by Kibana to store configuration and other data.
+# Docker Compose Volumes Documentation: https://docs.docker.com/compose/volumes/
+volumes:
+  esdata01: {}
+  esdata02: {}
+  esdata03: {}
+  kibanadata: {}
+
+# Definition of Elasticsearch node 1 (es01) service.
+# Uses the Elasticsearch image from Docker Hub with the version specified by STACK_VERSION.
+# Environment configuration for node name, cluster name, discovery hosts, node roles, and X-Pack security settings.
+# xpack.security.enabled=false: X-Pack security is disabled.
+# bootstrap.memory_lock=true: Locks memory to prevent Elasticsearch from being swapped to disk.
+# ES_JAVA_OPTS: Sets the JVM heap size for Elasticsearch.
+# ELASTIC_PASSWORD: Password for the 'elastic' user.
+# ulimits: Sets memlock limits to prevent swapping.
+# volumes: Maps the persistent volume esdata01 to the Elasticsearch data directory.
+# ports: Maps container port 9200 to host port 9200.
+# networks: Connects the container to the docIx network.
+# healthcheck: Ensures the Elasticsearch service is running properly before other services depend on it.
+# Elasticsearch Documentation: https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html
+services:
+  es01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=${CLUSTER_NAME}
+      - discovery.seed_hosts=es01,es02,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - node.roles=master,data,ingest,remote_cluster_client
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP} -Xmx${ES_HEAP}"
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata01:/usr/share/elasticsearch/data
+    networks: [docIx]
+    # Healthcheck internal container; no need to expose port 9200
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:9200 || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:9200 >/dev/null) || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+
+  # Definition of Elasticsearch node 2 (es02) service.
+  # Similar configuration to es01, but uses esdata02 volume.
+  # depends_on: Ensures es01 starts before es02.
+  es02:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.name=${CLUSTER_NAME}
+      - discovery.seed_hosts=es01,es02,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - node.roles=master,data,ingest,remote_cluster_client
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP} -Xmx${ES_HEAP}"
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - esdata02:/usr/share/elasticsearch/data
+    networks: [docIx]
+    depends_on: [es01]
+    # Healthcheck internal container; no need to expose port 9200
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:9200 || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:9200 >/dev/null) || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+
+  # Definition of Elasticsearch node 3 (es03) service.
+  # Similar configuration to es01, but uses esdata03 volume.
+  # depends_on: Ensures es01 starts before es03.
+  es03:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: es03
+    environment:
+      - node.name=es03
+      - cluster.name=${CLUSTER_NAME}
+      - discovery.seed_hosts=es01,es02,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - node.roles=master,data,ingest,remote_cluster_client
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP} -Xmx${ES_HEAP}"
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - esdata03:/usr/share/elasticsearch/data
+    networks: [docIx]
+    depends_on: [es01]
+    # Healthcheck internal container; no need to expose port 9200
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:9200 || (command -v curl >/dev/null 2>&1 && curl -fsS http://localhost:9200 >/dev/null) || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+
+  # Definition of HAProxy service.
+  # HAProxy is used as a load balancer to distribute requests to Elasticsearch nodes.
+  # volumes: Maps the haproxy.cfg configuration file from the host into the container.
+  # ports: Exposes port 9200 on the host for client access.
+  # depends_on: Ensures all Elasticsearch nodes (es01, es02, es03) are healthy or started before HAProxy runs.
+  # HAProxy Documentation: http://www.haproxy.org/download/2.9/doc/haproxy-overview.txt
+  es-haproxy:
+    image: haproxy:2.9
+    container_name: es-haproxy
+    volumes:
+      - ./es-haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "9200:9200" # expose satu endpoint ke host
+    # Healthcheck to satisfy Kibana's service_healthy dependency
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+
+    networks: [docIx]
+
+  # Definition of Kibana service.
+  # Kibana is a visualization and management tool for Elasticsearch.
+  # ELASTICSEARCH_HOSTS: Directs Kibana to the Elasticsearch cluster via es01 (HAProxy will distribute).
+  # XPACK_REPORTING_ENABLED: Enables X-Pack reporting features.
+  # ports: Maps container port 5601 to host port 5601.
+  # volumes: Maps the persistent volume kibanadata to the Kibana data directory.
+  # depends_on: Ensures HAProxy has started before Kibana runs.
+  # Kibana Documentation: https://www.elastic.co/guide/en/kibana/current/index.html
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://es-haproxy:9200
+      # Opsional: aktifkan sample data & dev tools by default
+      - XPACK_REPORTING_ENABLED=true
+    ports:
+      - "5601:5601"
+    volumes:
+      - kibanadata:/usr/share/kibana/data
+    networks: [docIx]
+    depends_on:
+      es-haproxy:
+        condition: service_healthy
