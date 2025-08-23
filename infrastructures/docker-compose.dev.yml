@@ -1,0 +1,81 @@
+version: '3.8'
+
+networks:
+  docix-dev:
+    driver: bridge
+
+volumes:
+  minio-dev-data:
+    driver: local
+  rabbitmq-dev-data:
+    driver: local
+  esdata-dev:
+    driver: local
+
+services:
+  # MinIO Object Storage for Development
+  minio-dev:
+    image: minio/minio:latest
+    container_name: docix-minio-dev
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-dev-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - docix-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # RabbitMQ Message Broker for Development
+  rabbitmq-dev:
+    image: rabbitmq:3-management
+    container_name: docix-rabbitmq-dev
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-dev-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - docix-dev
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  # Elasticsearch for Development
+  elasticsearch-dev:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: docix-elasticsearch-dev
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata-dev:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - docix-dev
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5

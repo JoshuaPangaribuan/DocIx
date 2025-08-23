@@ -1,0 +1,68 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.5'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+description = 'DocIx (Document Indexer Search Engine)'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// Elasticsearch Java Client 8.12
+	implementation 'co.elastic.clients:elasticsearch-java:8.12.0'
+	implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+	// Apache Tika for document parsing
+	implementation 'org.apache.tika:tika-core:2.9.1'
+	implementation 'org.apache.tika:tika-parsers-standard-package:2.9.1'
+
+	// Flyway for database migrations
+	implementation 'org.flywaydb:flyway-core'
+
+	// MinIO Client for object storage - Updated to latest version
+	implementation 'io.minio:minio:8.5.11'
+	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+	implementation 'com.squareup.okio:okio:3.6.0'
+
+	// Async processing and messaging
+	implementation 'org.springframework.boot:spring-boot-starter-amqp'
+	implementation 'org.springframework:spring-messaging'
+
+	// PostgreSQL for production
+	implementation 'org.postgresql:postgresql'
+
+	// H2 Database for development
+	runtimeOnly 'com.h2database:h2'
+
+	// Commons IO for file operations
+	implementation 'commons-io:commons-io:2.11.0'
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// MapStruct for object mapping
+	implementation 'org.mapstruct:mapstruct:1.5.3.Final'
+	annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
+	testAnnotationProcessor 'org.mapstruct:mapstruct-processor:1.5.3.Final'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

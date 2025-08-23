@@ -1,0 +1,24 @@
+# Ignore data directories
+data/
+logs/
+backups/
+
+# Ignore environment files with sensitive data
+#.env.prod
+#.env.local
+
+# Ignore temporary files
+*.tmp
+*.log
+*.pid
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE files
+.vscode/
+.idea/
+
+# Ignore Docker volumes
+docker-volumes/
