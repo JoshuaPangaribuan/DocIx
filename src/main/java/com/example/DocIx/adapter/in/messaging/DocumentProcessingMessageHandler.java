@@ -8,6 +8,7 @@ import com.example.DocIx.domain.port.out.ContentExtractor;
 import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
 import com.example.DocIx.domain.port.out.DocumentStorage;
+import com.rabbitmq.client.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -15,6 +16,7 @@ import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,12 +49,17 @@ public class DocumentProcessingMessageHandler {
 
     @RabbitListener(queues = "${docix.processing.queue.name}")
     public void handleDocumentProcessing(DocumentProcessingMessage message,
+                                       Channel channel,
                                        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
 
         // Check if shutdown is initiated - reject new messages
         if (shutdownManager.isShutdownInitiated()) {
             logger.warn("🛑 Rejecting new document processing request during shutdown: {}", message.getDocumentId());
-            // In a real implementation, you would nack the message to requeue it
+            try {
+                channel.basicReject(deliveryTag, true);
+            } catch (IOException e) {
+                logger.error("Failed to reject message during shutdown", e);
+            }
             return;
         }
 
@@ -65,6 +72,11 @@ public class DocumentProcessingMessageHandler {
             Optional<Document> documentOpt = documentRepository.findById(documentId);
             if (documentOpt.isEmpty()) {
                 logger.error("❌ Document not found: {}", documentId);
+                try {
+                    channel.basicReject(deliveryTag, true);
+                } catch (IOException e) {
+                    logger.error("Failed to reject message for missing document", e);
+                }
                 return;
             }
 
@@ -72,6 +84,11 @@ public class DocumentProcessingMessageHandler {
 
             if (!document.canBeProcessed()) {
                 logger.warn("⚠️ Document cannot be processed in current state: {} - {}", documentId, document.getStatus());
+                try {
+                    channel.basicReject(deliveryTag, true);
+                } catch (IOException e) {
+                    logger.error("Failed to reject message for unprocessable document", e);
+                }
                 return;
             }
 
@@ -82,9 +99,24 @@ public class DocumentProcessingMessageHandler {
             // Process document with shutdown checks
             processDocumentWithShutdownChecks(document);
 
+            try {
+                if (shutdownManager.isShutdownInitiated()) {
+                    channel.basicNack(deliveryTag, false, true);
+                } else {
+                    channel.basicAck(deliveryTag, false);
+                }
+            } catch (IOException e) {
+                logger.error("Failed to acknowledge message", e);
+            }
+
         } catch (Exception e) {
             logger.error("❌ Failed to process document: {}", documentId, e);
             handleProcessingError(documentId, e.getMessage());
+            try {
+                channel.basicNack(deliveryTag, false, true);
+            } catch (IOException ex) {
+                logger.error("Failed to nack message after error", ex);
+            }
         } finally {
             int remainingTasks = activeProcessingTasks.decrementAndGet();
             logger.info("✅ Completed processing document: {} (Remaining active tasks: {})", documentId, remainingTasks);

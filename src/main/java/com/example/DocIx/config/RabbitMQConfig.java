@@ -1,5 +1,6 @@
 package com.example.DocIx.config;
 
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
@@ -61,6 +62,7 @@ public class RabbitMQConfig {
         factory.setMessageConverter(messageConverter());
         factory.setConcurrentConsumers(2);
         factory.setMaxConcurrentConsumers(5);
+        factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         return factory;
     }
 }
