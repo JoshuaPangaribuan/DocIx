@@ -12,6 +12,8 @@ public interface DocumentRepository {
     Optional<Document> findById(DocumentId id);
     List<Document> findByStatus(DocumentStatus status);
     List<Document> findByUploader(String uploader);
+    List<Document> findByProcessed(boolean processed);
+    List<Document> findAll(); // Tambahkan method findAll
     void deleteById(DocumentId id);
     boolean existsById(DocumentId id);
 }

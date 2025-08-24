@@ -32,8 +32,8 @@ public class DocumentJpaEntity {
     @Column(nullable = false)
     private LocalDateTime uploadedAt;
 
-    @Column(columnDefinition = "CLOB")
-    private String extractedContent;
+    @Column(length = 1000)
+    private String downloadUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -51,7 +51,7 @@ public class DocumentJpaEntity {
     public DocumentJpaEntity(String id, String fileName, String originalFileName,
                            Long fileSize, String contentType, String storagePath,
                            String uploader, LocalDateTime uploadedAt,
-                           String extractedContent, DocumentStatus status,
+                           String downloadUrl, DocumentStatus status,
                            String errorMessage, LocalDateTime lastProcessedAt) {
         this.id = id;
         this.fileName = fileName;
@@ -61,7 +61,7 @@ public class DocumentJpaEntity {
         this.storagePath = storagePath;
         this.uploader = uploader;
         this.uploadedAt = uploadedAt;
-        this.extractedContent = extractedContent;
+        this.downloadUrl = downloadUrl;
         this.status = status;
         this.errorMessage = errorMessage;
         this.lastProcessedAt = lastProcessedAt;
@@ -92,8 +92,8 @@ public class DocumentJpaEntity {
     public LocalDateTime getUploadedAt() { return uploadedAt; }
     public void setUploadedAt(LocalDateTime uploadedAt) { this.uploadedAt = uploadedAt; }
 
-    public String getExtractedContent() { return extractedContent; }
-    public void setExtractedContent(String extractedContent) { this.extractedContent = extractedContent; }
+    public String getDownloadUrl() { return downloadUrl; }
+    public void setDownloadUrl(String downloadUrl) { this.downloadUrl = downloadUrl; }
 
     public DocumentStatus getStatus() { return status; }
     public void setStatus(DocumentStatus status) { this.status = status; }

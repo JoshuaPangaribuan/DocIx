@@ -3,6 +3,9 @@ package com.example.DocIx.adapter.in.web;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentRepository;
+import com.example.DocIx.domain.util.LoggingUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,6 +16,7 @@ import java.util.Optional;
 @RequestMapping("/api/documents")
 public class DocumentStatusController {
 
+    private static final Logger logger = LoggerFactory.getLogger(DocumentStatusController.class);
     private final DocumentRepository documentRepository;
 
     public DocumentStatusController(DocumentRepository documentRepository) {
@@ -21,27 +25,60 @@ public class DocumentStatusController {
 
     @GetMapping("/{documentId}/status")
     public ResponseEntity<DocumentStatusResponse> getDocumentStatus(@PathVariable String documentId) {
-        Optional<Document> documentOpt = documentRepository.findById(DocumentId.of(documentId));
+        long startTime = System.currentTimeMillis();
 
-        if (documentOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
+        logger.info("Starting document status check - DocumentId: {}", documentId);
+
+        try {
+            Optional<Document> documentOpt = documentRepository.findById(DocumentId.of(documentId));
+
+            if (documentOpt.isEmpty()) {
+                long duration = System.currentTimeMillis() - startTime;
+                logger.warn("Document status check failed - DocumentId: {} not found", documentId);
+
+                LoggingUtil.logApiAccess("GET", "/api/documents/" + documentId + "/status", "anonymous",
+                                       duration, 404, "Document not found");
+                return ResponseEntity.notFound().build();
+            }
+
+            Document document = documentOpt.get();
+            DocumentStatusResponse response = new DocumentStatusResponse(
+                document.getId().getValue(),
+                document.getOriginalFileName(),
+                document.getStatus().name(),
+                document.getUploadedAt().toString(),
+                document.getLastProcessedAt() != null ? document.getLastProcessedAt().toString() : null,
+                document.getErrorMessage()
+            );
+
+            long duration = System.currentTimeMillis() - startTime;
+            String safeFileName = LoggingUtil.safeFileName(document.getOriginalFileName());
+
+            logger.info("Document status check completed - DocumentId: {}, Status: {}, File: {}, Duration: {}ms",
+                       documentId, document.getStatus().name(), safeFileName, duration);
+
+            LoggingUtil.logApiAccess("GET", "/api/documents/" + documentId + "/status", "anonymous",
+                                   duration, 200, "Status: " + document.getStatus().name());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            logger.error("Document status check failed - DocumentId: {}, Error: {}",
+                        documentId, e.getMessage(), e);
+
+            LoggingUtil.logApiError("GET", "/api/documents/" + documentId + "/status", "anonymous",
+                                  duration, e.getMessage());
+            throw e;
         }
-
-        Document document = documentOpt.get();
-        DocumentStatusResponse response = new DocumentStatusResponse(
-            document.getId().getValue(),
-            document.getOriginalFileName(),
-            document.getStatus().name(),
-            document.getUploadedAt().toString(),
-            document.getLastProcessedAt() != null ? document.getLastProcessedAt().toString() : null,
-            document.getErrorMessage()
-        );
-
-        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/status/{status}")
     public ResponseEntity<List<DocumentStatusResponse>> getDocumentsByStatus(@PathVariable String status) {
+        long startTime = System.currentTimeMillis();
+
+        logger.info("Starting documents by status query - Status: {}", status);
+
         try {
             List<Document> documents = documentRepository.findByStatus(
                 com.example.DocIx.domain.model.DocumentStatus.valueOf(status.toUpperCase())
@@ -58,9 +95,32 @@ public class DocumentStatusController {
                 ))
                 .toList();
 
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Documents by status query completed - Status: {}, Results: {}, Duration: {}ms",
+                       status, responses.size(), duration);
+
+            LoggingUtil.logApiAccess("GET", "/api/documents/status/" + status, "anonymous",
+                                   duration, 200, "Results: " + responses.size());
+
             return ResponseEntity.ok(responses);
+
         } catch (IllegalArgumentException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            logger.warn("Documents by status query failed - Invalid status: {}, Duration: {}ms",
+                       status, duration);
+
+            LoggingUtil.logApiAccess("GET", "/api/documents/status/" + status, "anonymous",
+                                   duration, 400, "Invalid status");
             return ResponseEntity.badRequest().build();
+
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            logger.error("Documents by status query failed - Status: {}, Error: {}",
+                        status, e.getMessage(), e);
+
+            LoggingUtil.logApiError("GET", "/api/documents/status/" + status, "anonymous",
+                                  duration, e.getMessage());
+            throw e;
         }
     }
 

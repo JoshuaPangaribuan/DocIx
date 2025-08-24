@@ -10,7 +10,7 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 - Autocomplete dengan maksimal 5 rekomendasi
 - Async processing pipeline dengan RabbitMQ
 - Storage menggunakan MinIO/S3
-- Metadata disimpan di PostgreSQL/H2
+- Metadata disimpan di PostgreSQL
 
 ## API Endpoints
 
@@ -219,5 +219,4 @@ docix.processing.routing.key=document.process
 
 3. Access services:
    - API: http://localhost:8080
-   - H2 Console: http://localhost:8080/h2-console
    - MinIO Console: http://localhost:9001

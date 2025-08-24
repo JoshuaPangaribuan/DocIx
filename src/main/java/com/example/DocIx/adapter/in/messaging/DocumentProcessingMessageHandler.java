@@ -2,12 +2,8 @@ package com.example.DocIx.adapter.in.messaging;
 
 import com.example.DocIx.adapter.out.messaging.RabbitMQDocumentProcessingPublisher.DocumentProcessingMessage;
 import com.example.DocIx.config.GracefulShutdownManager;
-import com.example.DocIx.domain.model.Document;
-import com.example.DocIx.domain.model.DocumentId;
-import com.example.DocIx.domain.port.out.ContentExtractor;
-import com.example.DocIx.domain.port.out.DocumentRepository;
-import com.example.DocIx.domain.port.out.DocumentSearchEngine;
-import com.example.DocIx.domain.port.out.DocumentStorage;
+import com.example.DocIx.domain.service.DocumentIndexingService;
+import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -15,8 +11,6 @@ import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
-import java.io.InputStream;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
@@ -24,141 +18,79 @@ public class DocumentProcessingMessageHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentProcessingMessageHandler.class);
 
-    private final DocumentRepository documentRepository;
-    private final DocumentStorage documentStorage;
-    private final ContentExtractor contentExtractor;
-    private final DocumentSearchEngine searchEngine;
+    private final DocumentIndexingService documentIndexingService;
     private final GracefulShutdownManager shutdownManager;
 
     // Track active processing tasks for graceful shutdown
     private final AtomicInteger activeProcessingTasks = new AtomicInteger(0);
 
-    public DocumentProcessingMessageHandler(DocumentRepository documentRepository,
-                                          DocumentStorage documentStorage,
-                                          ContentExtractor contentExtractor,
-                                          DocumentSearchEngine searchEngine,
+    public DocumentProcessingMessageHandler(DocumentIndexingService documentIndexingService,
                                           GracefulShutdownManager shutdownManager) {
-        this.documentRepository = documentRepository;
-        this.documentStorage = documentStorage;
-        this.contentExtractor = contentExtractor;
-        this.searchEngine = searchEngine;
+        this.documentIndexingService = documentIndexingService;
         this.shutdownManager = shutdownManager;
     }
 
     @RabbitListener(queues = "${docix.processing.queue.name}")
     public void handleDocumentProcessing(DocumentProcessingMessage message,
                                        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+        String documentId = message.getDocumentId();
 
-        // Check if shutdown is initiated - reject new messages
-        if (shutdownManager.isShutdownInitiated()) {
-            logger.warn("🛑 Rejecting new document processing request during shutdown: {}", message.getDocumentId());
-            // In a real implementation, you would nack the message to requeue it
+        // Check if shutdown is in progress
+        if (shutdownManager.isShuttingDown()) {
+            logger.warn("Sistem sedang shutdown, menolak pemrosesan dokumen: {}", documentId);
             return;
         }
 
-        DocumentId documentId = DocumentId.of(message.getDocumentId());
         activeProcessingTasks.incrementAndGet();
 
         try {
-            logger.info("🔄 Processing document: {} (Active tasks: {})", documentId, activeProcessingTasks.get());
+            logger.info("Memulai pemrosesan dokumen asinkron: {}", documentId);
+            LoggingUtil.logPerformance("document_processing_start", documentId);
 
-            Optional<Document> documentOpt = documentRepository.findById(documentId);
-            if (documentOpt.isEmpty()) {
-                logger.error("❌ Document not found: {}", documentId);
-                return;
-            }
+            // Proses indexing menggunakan DocumentIndexingService yang baru
+            documentIndexingService.processDocumentIndexing(documentId);
 
-            Document document = documentOpt.get();
-
-            if (!document.canBeProcessed()) {
-                logger.warn("⚠️ Document cannot be processed in current state: {} - {}", documentId, document.getStatus());
-                return;
-            }
-
-            // Mark as processing
-            document.markAsProcessing();
-            documentRepository.save(document);
-
-            // Process document with shutdown checks
-            processDocumentWithShutdownChecks(document);
+            LoggingUtil.logPerformance("document_processing_complete", documentId);
+            logger.info("Pemrosesan dokumen selesai: {}", documentId);
 
         } catch (Exception e) {
-            logger.error("❌ Failed to process document: {}", documentId, e);
-            handleProcessingError(documentId, e.getMessage());
+            logger.error("Error saat memproses dokumen {}: {}", documentId, e.getMessage(), e);
+            LoggingUtil.logError("document_processing_error", documentId, e);
         } finally {
-            int remainingTasks = activeProcessingTasks.decrementAndGet();
-            logger.info("✅ Completed processing document: {} (Remaining active tasks: {})", documentId, remainingTasks);
-
-            // Notify if this was the last task during shutdown
-            if (remainingTasks == 0 && shutdownManager.isShutdownInitiated()) {
-                logger.info("🎯 All document processing tasks completed during shutdown");
-            }
+            activeProcessingTasks.decrementAndGet();
         }
     }
 
-    private void processDocumentWithShutdownChecks(Document document) {
-        try {
-            // Check shutdown status before starting intensive operations
-            if (shutdownManager.isShutdownInitiated()) {
-                logger.warn("🛑 Aborting document processing due to shutdown: {}", document.getId());
-                return;
-            }
-
-            try (InputStream fileContent = documentStorage.retrieve(document.getStoragePath())) {
-
-                // Check shutdown status before content extraction
-                if (shutdownManager.isShutdownInitiated()) {
-                    logger.warn("🛑 Aborting content extraction due to shutdown: {}", document.getId());
-                    return;
-                }
-
-                // Extract text content
-                String extractedContent = contentExtractor.extractText(fileContent, document.getFileName());
-
-                // Check shutdown status before marking as processed
-                if (shutdownManager.isShutdownInitiated()) {
-                    logger.warn("🛑 Aborting final processing due to shutdown: {}", document.getId());
-                    return;
-                }
-
-                // Mark as processed
-                document.markAsProcessed(extractedContent);
-                documentRepository.save(document);
-
-                // Index in search engine (if not shutting down)
-                if (!shutdownManager.isShutdownInitiated()) {
-                    searchEngine.indexDocument(document);
-                }
-
-                logger.info("✅ Successfully processed document: {}", document.getId());
-
-            }
-        } catch (ContentExtractor.ContentExtractionException e) {
-            logger.error("❌ Content extraction failed for document: {}", document.getId(), e);
-            document.markAsFailed("Content extraction failed: " + e.getMessage());
-            documentRepository.save(document);
-
-        } catch (Exception e) {
-            logger.error("❌ Unexpected error processing document: {}", document.getId(), e);
-            document.markAsFailed("Processing failed: " + e.getMessage());
-            documentRepository.save(document);
-        }
-    }
-
-    private void handleProcessingError(DocumentId documentId, String errorMessage) {
-        try {
-            Optional<Document> documentOpt = documentRepository.findById(documentId);
-            if (documentOpt.isPresent()) {
-                Document document = documentOpt.get();
-                document.markAsFailed(errorMessage);
-                documentRepository.save(document);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to update document status after error: {}", documentId, e);
-        }
-    }
-
-    public int getActiveProcessingTasks() {
+    /**
+     * Get number of active processing tasks (for graceful shutdown dan monitoring)
+     */
+    public int getActiveProcessingTasksCount() {
         return activeProcessingTasks.get();
+    }
+
+    /**
+     * Alias method untuk kompatibilitas dengan health indicator
+     */
+    public int getActiveProcessingTasks() {
+        return getActiveProcessingTasksCount();
+    }
+
+    /**
+     * Wait for all active processing tasks to complete
+     */
+    public void waitForProcessingCompletion(long maxWaitMs) {
+        long startTime = System.currentTimeMillis();
+
+        while (activeProcessingTasks.get() > 0 &&
+               (System.currentTimeMillis() - startTime) < maxWaitMs) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        logger.info("Menunggu penyelesaian {} tugas pemrosesan aktif", activeProcessingTasks.get());
     }
 }

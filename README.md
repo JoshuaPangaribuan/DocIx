@@ -7,31 +7,33 @@
 
 ## 📖 Overview
 
-DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi konten, dan pencarian full-text dokumen PDF dengan arsitektur Hexagonal (Ports & Adapters). Aplikasi ini dibangun menggunakan Spring Boot dan mendukung processing asynchronous dengan message queue.
+DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi konten, dan pencarian full-text dokumen PDF dengan arsitektur Hexagonal (Ports & Adapters). Aplikasi ini dibangun menggunakan Spring Boot dan mendukung processing asynchronous dengan message queue serta **segmented indexing** untuk dokumen berukuran besar.
 
 ## ✨ Features
 
-- 📄 **Document Upload**: Upload dokumen PDF (single & bulk) maksimal 50MB per file
-- 🔍 **Full-Text Search**: Pencarian konten dokumen menggunakan Elasticsearch
+- 📄 **Document Upload**: Upload dokumen PDF (single & bulk) maksimal 100MB per file
+- 🧩 **Segmented Indexing**: Pemrosesan dokumen besar dengan segmentasi konten yang dapat dikonfigurasi (default 1024 karakter)
+- 🔍 **Full-Text Search**: Pencarian konten dokumen menggunakan Elasticsearch dengan dukungan pencarian tersegmentasi
 - ⚡ **Async Processing**: Pipeline pemrosesan asinkron dengan RabbitMQ
 - 💾 **Multi-Storage**: PostgreSQL untuk metadata, MinIO untuk file storage
 - 🔧 **Graceful Shutdown**: Shutdown yang aman dengan penyelesaian task aktif
 - 📊 **Monitoring**: Health checks dan metrics via Spring Actuator
 - 🐳 **Docker Ready**: Containerized dengan multi-stage build
 - 🏗️ **Hexagonal Architecture**: Clean architecture dengan ports & adapters
+- 🔄 **Type-Safe Mapping**: Object mapping dengan MapStruct untuk performance dan type safety
+- 🎯 **Smart Processing**: Otomatis memilih antara indexing biasa dan tersegmentasi berdasarkan ukuran dokumen
 
 ## 🏗️ Tech Stack
 
 ### Core Framework
 - **Java 21** - Programming language
 - **Spring Boot 3.5.5** - Application framework
-- **Gradle 8.5** - Build tool
+- **Gradle 8.14.3** - Build tool
 
 ### Storage & Database
 - **PostgreSQL** - Primary database for metadata
-- **H2** - In-memory database for development
 - **MinIO** - Object storage for PDF files
-- **Elasticsearch** - Search engine for full-text indexing
+- **Elasticsearch** - Search engine for full-text indexing with segmented content support
 
 ### Message Processing
 - **RabbitMQ** - Message broker for async processing
@@ -41,6 +43,44 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 - **Spring Actuator** - Application monitoring
 - **Flyway** - Database migrations
 - **MapStruct** - Object mapping
+- **Micrometer + Prometheus** - Metrics registry dan endpoint `/actuator/prometheus`
+- **OpenTelemetry (Jaeger Exporter)** - Distributed tracing
+
+## 🧩 Segmented Document Processing
+
+DocIx mengimplementasikan sistem pemrosesan dokumen tersegmentasi yang memungkinkan penanganan dokumen PDF berukuran besar secara efisien.
+
+### How It Works
+
+1. **Content Extraction**: Ekstraksi teks dari PDF menggunakan Apache Tika
+2. **Smart Segmentation**: Pembagian konten menjadi segmen dengan ukuran yang dapat dikonfigurasi
+3. **Intelligent Indexing**: 
+   - Dokumen kecil (≤ segment size): Indexing biasa
+   - Dokumen besar (> segment size): Indexing tersegmentasi
+4. **Enhanced Search**: Pencarian di seluruh segmen dengan scoring relevansi yang ditingkatkan
+
+### Configuration
+
+```properties
+# Document Segmentation Configuration
+docix.document.segment.size=${DOCIX_SEGMENT_SIZE:1024}
+```
+
+### Benefits
+
+- ✅ **Better Performance**: Dokumen besar tidak membebani Elasticsearch
+- ✅ **Improved Search**: Hasil pencarian yang lebih presisi dari segmen yang relevan
+- ✅ **Memory Efficient**: Menghindari masalah memory untuk file besar
+- ✅ **Configurable**: Sesuaikan ukuran segmen berdasarkan kebutuhan
+- ✅ **Backward Compatible**: Dokumen kecil tetap menggunakan indexing efisien
+- ✅ **Smart Breaking**: Prioritas pada batas kalimat untuk keterbacaan yang lebih baik
+
+### Segmentation Features
+
+- **Sentence Boundary Detection**: Memotong di akhir kalimat bila memungkinkan
+- **Word Boundary Fallback**: Fallback ke batas kata jika tidak ada batas kalimat
+- **Configurable Size**: Ukuran segmen dapat disesuaikan via configuration
+- **Metadata Tracking**: Setiap segmen menyimpan informasi posisi dan total segmen
 
 ## 🚀 Quick Start
 
@@ -61,7 +101,7 @@ cd DocIx
 
 ```bash
 cd infrastructures
-docker-compose up -d
+make dev-up
 ```
 
 Ini akan menjalankan:
@@ -77,13 +117,14 @@ Edit `src/main/resources/application.properties` atau set environment variables:
 ```properties
 # Database
 spring.datasource.url=jdbc:postgresql://localhost:5432/docix
-spring.datasource.username=docix
-spring.datasource.password=docix
+spring.datasource.username=docix_user
+spring.datasource.password=docix_password
 
 # MinIO
 minio.url=http://localhost:9000
 minio.access-key=minioadmin
 minio.secret-key=minioadmin
+minio.bucket-name=docix-documents
 
 # Elasticsearch
 spring.elasticsearch.uris=http://localhost:9200
@@ -91,6 +132,8 @@ spring.elasticsearch.uris=http://localhost:9200
 # RabbitMQ
 spring.rabbitmq.host=localhost
 spring.rabbitmq.port=5672
+spring.rabbitmq.username=guest
+spring.rabbitmq.password=guest
 ```
 
 ### 4. Run Application
@@ -104,7 +147,9 @@ spring.rabbitmq.port=5672
 java -jar build/libs/DocIx-0.0.1-SNAPSHOT.jar
 ```
 
-Aplikasi akan berjalan di `http://localhost:8081`
+Aplikasi akan berjalan di `http://localhost:8080`
+
+Catatan: Jika menjalankan via Docker Compose (infrastructures/docker-compose.yml), akses aplikasi melalui `http://localhost:8081` (mapping port host 8081 ke container 8080).
 
 ## 📡 API Endpoints
 
@@ -132,7 +177,7 @@ Aplikasi akan berjalan di `http://localhost:8081`
 
 **Upload Document:**
 ```bash
-curl -X POST "http://localhost:8081/api/documents/upload" \
+curl -X POST "http://localhost:8080/api/documents/upload" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@document.pdf" \
   -F "uploader=John Doe"
@@ -140,10 +185,136 @@ curl -X POST "http://localhost:8081/api/documents/upload" \
 
 **Search Documents:**
 ```bash
-curl "http://localhost:8081/api/documents/search?query=spring+boot&page=0&size=10"
+curl "http://localhost:8080/api/documents/search?query=spring+boot&page=0&size=10"
 ```
 
 Lihat [API_DOCUMENTATION.md](API_DOCUMENTATION.md) untuk dokumentasi lengkap.
+
+## 🔄 MapStruct Integration
+
+DocIx menggunakan MapStruct untuk object mapping yang type-safe dan performant di seluruh layer aplikasi.
+
+### Architecture & Mappers
+
+#### Web Layer Mapping
+```java
+@Mapper(componentModel = "spring")
+public interface DocumentWebMapper {
+    
+    // Upload response mapping
+    @Mapping(target = "documentId", source = "documentId.value")
+    UploadResponse toUploadResponse(UploadDocumentUseCase.UploadResult result);
+    
+    // Search response mapping dengan custom logic
+    default SearchResponse toSearchResponse(SearchDocumentUseCase.SearchResponse searchResponse) {
+        return new SearchResponse(
+            toSearchResultDtoList(searchResponse.getResults()),
+            searchResponse.getTotalHits(),
+            searchResponse.getPage(),
+            searchResponse.getSize(),
+            searchResponse.hasNext(),
+            searchResponse.hasPrevious()
+        );
+    }
+    
+    // Bulk upload helper methods
+    default BulkUploadResponse.UploadResult toUploadResult(String fileName, String documentId, String message) {
+        return new BulkUploadResponse.UploadResult(fileName, documentId, message);
+    }
+}
+```
+
+#### Service Layer Mapping
+```java
+@Mapper(componentModel = "spring")
+public interface DocumentServiceMapper {
+    
+    // Helper methods untuk use case results
+    default UploadResult createSuccessResult(DocumentId documentId) {
+        return new UploadResult(documentId, "Document uploaded successfully and queued for processing");
+    }
+    
+    default UploadResult toUploadResultFromDocument(Document document, String message) {
+        return new UploadResult(document.getId(), message);
+    }
+}
+```
+
+### Key Benefits
+
+- **🚀 Performance**: Zero reflection, generated plain Java code
+- **🔒 Type Safety**: Compile-time validation dan error detection
+- **🧹 Clean Code**: Centralized mapping logic, reduced boilerplate
+- **🔧 Maintainable**: Easy to modify dan extend mappings
+- **🏗️ Spring Integration**: Auto-injection sebagai Spring beans
+
+### Usage Examples
+
+#### Controller Layer
+```java
+@RestController
+public class DocumentController {
+    
+    private final DocumentWebMapper documentWebMapper;
+    
+    @PostMapping("/upload")
+    public ResponseEntity<UploadResponse> uploadDocument(@RequestParam("file") MultipartFile file) {
+        UploadDocumentUseCase.UploadResult result = uploadDocumentUseCase.uploadDocument(command);
+        return ResponseEntity.ok(documentWebMapper.toUploadResponse(result));
+    }
+    
+    @GetMapping("/search")
+    public ResponseEntity<SearchResponse> searchDocuments(@RequestParam("q") String query) {
+        SearchDocumentUseCase.SearchResponse result = searchDocumentUseCase.searchDocuments(searchQuery);
+        return ResponseEntity.ok(documentWebMapper.toSearchResponse(result));
+    }
+}
+```
+
+#### Service Layer
+```java
+@Service
+public class UploadDocumentService implements UploadDocumentUseCase {
+    
+    private final DocumentServiceMapper documentServiceMapper;
+    
+    @Override
+    public UploadResult uploadDocument(UploadCommand command) {
+        // ...business logic...
+        documentRepository.save(document);
+        processingPublisher.publishDocumentForProcessing(documentId);
+        
+        return documentServiceMapper.createSuccessResult(documentId);
+    }
+}
+```
+
+### Build Configuration
+
+MapStruct dikonfigurasi di `build.gradle`:
+
+```gradle
+dependencies {
+    // MapStruct for object mapping
+    implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+    testAnnotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+}
+```
+
+### Generated Code Location
+
+MapStruct annotation processor menghasilkan implementation classes di:
+- **Development**: `build/generated/sources/annotationProcessor/java/main/`
+- **IDE Integration**: Auto-detected dan indexed untuk code completion
+
+### Best Practices
+
+- ✅ Gunakan `componentModel = "spring"` untuk dependency injection
+- ✅ Combine `@Mapping` annotations dengan `default` methods untuk complex mapping
+- ✅ Leverage MapStruct untuk list/collection mappings
+- ✅ Use custom mapping methods untuk non-standard conversions
+- ✅ Test mapper behavior dengan unit tests
 
 ## 🛠️ Development
 
@@ -212,9 +383,17 @@ docker run -d \
   --name docix \
   -p 8081:8080 \
   -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/docix \
+  -e DATABASE_USERNAME=docix_user \
+  -e DATABASE_PASSWORD=docix_password \
   -e MINIO_URL=http://host.docker.internal:9000 \
+  -e MINIO_ACCESS_KEY=minioadmin \
+  -e MINIO_SECRET_KEY=minioadmin \
+  -e MINIO_BUCKET_NAME=docix-documents \
   -e ELASTICSEARCH_URL=http://host.docker.internal:9200 \
   -e RABBITMQ_HOST=host.docker.internal \
+  -e RABBITMQ_PORT=5672 \
+  -e RABBITMQ_USERNAME=guest \
+  -e RABBITMQ_PASSWORD=guest \
   docix:latest
 ```
 
@@ -272,19 +451,22 @@ spec:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection URL | `jdbc:h2:mem:testdb` |
-| `DATABASE_USERNAME` | Database username | `sa` |
-| `DATABASE_PASSWORD` | Database password | `` |
+| `DATABASE_URL` | PostgreSQL connection URL | `jdbc:postgresql://localhost:5432/docix` |
+| `DATABASE_USERNAME` | Database username | `docix_user` |
+| `DATABASE_PASSWORD` | Database password | `docix_password` |
 | `MINIO_URL` | MinIO server URL | `http://localhost:9000` |
 | `MINIO_ACCESS_KEY` | MinIO access key | `minioadmin` |
 | `MINIO_SECRET_KEY` | MinIO secret key | `minioadmin` |
+| `MINIO_BUCKET_NAME` | MinIO bucket for documents | `docix-documents` |
 | `ELASTICSEARCH_URL` | Elasticsearch URL | `http://localhost:9200` |
 | `RABBITMQ_HOST` | RabbitMQ host | `localhost` |
 | `RABBITMQ_PORT` | RabbitMQ port | `5672` |
+| `RABBITMQ_USERNAME` | RabbitMQ username | `guest` |
+| `RABBITMQ_PASSWORD` | RabbitMQ password | `guest` |
 
 ### Application Profiles
 
-- **default**: H2 database, local services
+- **default**: PostgreSQL database, local services
 - **dev**: PostgreSQL, containerized services
 - **prod**: Production configuration with external services
 
@@ -315,11 +497,15 @@ Lihat [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md) untuk detail lengkap.
 - **Detailed Health**: `/actuator/health` - Status semua components
 
 ### Metrics
-
 - Application metrics: `/actuator/metrics`
+- Prometheus scrape endpoint: `/actuator/prometheus`
 - System status: `/api/system/status`
 - Active tasks monitoring
 - Database connection pool status
+
+### Tracing
+- OpenTelemetry tracing diaktifkan, ekspor ke Jaeger (konfigurasi melalui starter OpenTelemetry)
+- Gunakan Jaeger UI untuk visualisasi trace
 
 ### Logging
 

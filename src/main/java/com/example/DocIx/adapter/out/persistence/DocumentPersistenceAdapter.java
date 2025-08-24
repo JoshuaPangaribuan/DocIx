@@ -50,6 +50,23 @@ public class DocumentPersistenceAdapter implements DocumentRepository {
     }
 
     @Override
+    public List<Document> findByProcessed(boolean processed) {
+        DocumentStatus status = processed ? DocumentStatus.PROCESSED : DocumentStatus.UPLOADED;
+        return jpaRepository.findByStatus(status)
+                .stream()
+                .map(mapper::toDomainEntity)
+                .toList();
+    }
+
+    @Override
+    public List<Document> findAll() {
+        return jpaRepository.findAll()
+                .stream()
+                .map(mapper::toDomainEntity)
+                .toList();
+    }
+
+    @Override
     public void deleteById(DocumentId id) {
         jpaRepository.deleteById(id.getValue());
     }

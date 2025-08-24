@@ -115,6 +115,10 @@ public class GracefulShutdownManager implements ApplicationListener<ContextClose
         }
     }
 
+    public boolean isShuttingDown() {
+        return shutdownInitiated.get();
+    }
+
     public boolean isShutdownInitiated() {
         return shutdownInitiated.get();
     }

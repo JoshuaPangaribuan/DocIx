@@ -2,6 +2,9 @@ package com.example.DocIx.adapter.in.web;
 
 import com.example.DocIx.adapter.in.messaging.DocumentProcessingMessageHandler;
 import com.example.DocIx.config.GracefulShutdownManager;
+import com.example.DocIx.domain.util.LoggingUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +19,7 @@ import java.util.Map;
 @RequestMapping("/api/system")
 public class SystemStatusController {
 
+    private static final Logger logger = LoggerFactory.getLogger(SystemStatusController.class);
     private final GracefulShutdownManager shutdownManager;
     private final DocumentProcessingMessageHandler messageHandler;
 
@@ -27,27 +31,60 @@ public class SystemStatusController {
 
     @GetMapping("/status")
     public ResponseEntity<SystemStatusResponse> getSystemStatus() {
-        SystemStatusResponse response = new SystemStatusResponse();
-        response.setTimestamp(LocalDateTime.now());
-        response.setActiveProcessingTasks(messageHandler.getActiveProcessingTasks());
-        response.setShutdownInitiated(shutdownManager.isShutdownInitiated());
-        response.setShutdownCompleted(shutdownManager.isShutdownCompleted());
+        long startTime = System.currentTimeMillis();
 
-        if (shutdownManager.isShutdownCompleted()) {
-            response.setStatus("SHUTDOWN_COMPLETED");
-            response.setMessage("Application has completed graceful shutdown");
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+        logger.debug("Starting system status check");
+
+        try {
+            SystemStatusResponse response = new SystemStatusResponse();
+            response.setTimestamp(LocalDateTime.now());
+            response.setActiveProcessingTasks(messageHandler.getActiveProcessingTasks());
+            response.setShutdownInitiated(shutdownManager.isShutdownInitiated());
+            response.setShutdownCompleted(shutdownManager.isShutdownCompleted());
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            if (shutdownManager.isShutdownCompleted()) {
+                response.setStatus("SHUTDOWN_COMPLETED");
+                response.setMessage("Application has completed graceful shutdown");
+
+                logger.info("System status check completed - Status: SHUTDOWN_COMPLETED, Duration: {}ms", duration);
+                LoggingUtil.logApiAccess("GET", "/api/system/status", "system",
+                                       duration, 503, "Shutdown completed");
+
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+            }
+
+            if (shutdownManager.isShutdownInitiated()) {
+                response.setStatus("SHUTTING_DOWN");
+                response.setMessage("Application is shutting down gracefully");
+
+                logger.warn("System status check completed - Status: SHUTTING_DOWN, Active tasks: {}, Duration: {}ms",
+                           response.getActiveProcessingTasks(), duration);
+                LoggingUtil.logApiAccess("GET", "/api/system/status", "system",
+                                       duration, 503, "Shutting down, active tasks: " + response.getActiveProcessingTasks());
+
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+            }
+
+            response.setStatus("RUNNING");
+            response.setMessage("Application is running normally");
+
+            logger.debug("System status check completed - Status: RUNNING, Active tasks: {}, Duration: {}ms",
+                        response.getActiveProcessingTasks(), duration);
+            LoggingUtil.logApiAccess("GET", "/api/system/status", "system",
+                                   duration, 200, "Running, active tasks: " + response.getActiveProcessingTasks());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            logger.error("System status check failed - Error: {}", e.getMessage(), e);
+
+            LoggingUtil.logApiError("GET", "/api/system/status", "system",
+                                  duration, e.getMessage());
+            throw e;
         }
-
-        if (shutdownManager.isShutdownInitiated()) {
-            response.setStatus("SHUTTING_DOWN");
-            response.setMessage("Application is shutting down gracefully");
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
-        }
-
-        response.setStatus("RUNNING");
-        response.setMessage("Application is running normally");
-        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/health/ready")

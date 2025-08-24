@@ -10,7 +10,7 @@ CREATE TABLE documents (
     storage_path VARCHAR(500) NOT NULL,
     uploader VARCHAR(100) NOT NULL,
     uploaded_at TIMESTAMP NOT NULL,
-    extracted_content CLOB,
+    extracted_content TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'UPLOADED',
     error_message TEXT,
     last_processed_at TIMESTAMP,
