@@ -3,6 +3,7 @@ package com.example.DocIx.domain.service;
 import com.example.DocIx.domain.port.in.SearchDocumentUseCase;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResult;
+import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResults;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,17 +21,18 @@ public class SearchDocumentService implements SearchDocumentUseCase {
     public SearchResponse searchDocuments(SearchQuery query) {
         validateSearchQuery(query);
 
-        List<SearchResult> results = searchEngine.search(
+        SearchResults searchResults = searchEngine.search(
             query.getQuery(),
             query.getPage(),
             query.getSize()
         );
 
-        // For simplicity, we'll calculate total hits based on current results
-        // In a real implementation, the search engine would return total count
-        long totalHits = results.size() + (query.getPage() * query.getSize());
-
-        return new SearchResponse(results, totalHits, query.getPage(), query.getSize());
+        return new SearchResponse(
+            searchResults.getResults(),
+            searchResults.getTotalHits(),
+            query.getPage(),
+            query.getSize()
+        );
     }
 
     private void validateSearchQuery(SearchQuery query) {

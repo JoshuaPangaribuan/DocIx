@@ -3,6 +3,8 @@ package com.example.DocIx.adapter.out.search;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
+import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResult;
+import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResults;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.IndexRequest;
@@ -71,7 +73,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
     }
 
     @Override
-    public List<SearchResult> search(String query, int page, int size) {
+    public SearchResults search(String query, int page, int size) {
         try {
             Query searchQuery = Query.of(q -> q
                 .multiMatch(m -> m
@@ -110,7 +112,9 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                 ));
             }
 
-            return results;
+            long totalHits = response.hits().total() != null ? response.hits().total().value() : results.size();
+
+            return new SearchResults(results, totalHits);
 
         } catch (Exception e) {
             throw new SearchEngineException("Failed to search documents", e);
