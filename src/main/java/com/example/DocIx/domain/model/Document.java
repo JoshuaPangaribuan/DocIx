@@ -17,8 +17,22 @@ public class Document {
     private String errorMessage;
     private LocalDateTime lastProcessedAt;
 
-    public Document(DocumentId id, String fileName, String originalFileName,
-                   long fileSize, String contentType, String storagePath, String uploader) {
+    /**
+     * Full constructor used when rehydrating a {@link Document} from persistence.
+     * All fields correspond to the columns in the database.
+     */
+    public Document(DocumentId id,
+                    String fileName,
+                    String originalFileName,
+                    long fileSize,
+                    String contentType,
+                    String storagePath,
+                    String uploader,
+                    LocalDateTime uploadedAt,
+                    String extractedContent,
+                    DocumentStatus status,
+                    String errorMessage,
+                    LocalDateTime lastProcessedAt) {
         this.id = Objects.requireNonNull(id, "Document ID cannot be null");
         this.fileName = Objects.requireNonNull(fileName, "File name cannot be null");
         this.originalFileName = Objects.requireNonNull(originalFileName, "Original file name cannot be null");
@@ -26,8 +40,21 @@ public class Document {
         this.contentType = Objects.requireNonNull(contentType, "Content type cannot be null");
         this.storagePath = Objects.requireNonNull(storagePath, "Storage path cannot be null");
         this.uploader = Objects.requireNonNull(uploader, "Uploader cannot be null");
-        this.uploadedAt = LocalDateTime.now();
-        this.status = DocumentStatus.UPLOADED;
+        this.uploadedAt = Objects.requireNonNull(uploadedAt, "Uploaded time cannot be null");
+        this.extractedContent = extractedContent;
+        this.status = Objects.requireNonNullElse(status, DocumentStatus.UPLOADED);
+        this.errorMessage = errorMessage;
+        this.lastProcessedAt = lastProcessedAt;
+    }
+
+    /**
+     * Convenience constructor used when a new document is uploaded.
+     * Populates default values for fields that are normally set during processing.
+     */
+    public Document(DocumentId id, String fileName, String originalFileName,
+                   long fileSize, String contentType, String storagePath, String uploader) {
+        this(id, fileName, originalFileName, fileSize, contentType, storagePath, uploader,
+            LocalDateTime.now(), null, DocumentStatus.UPLOADED, null, null);
     }
 
     // Business methods
