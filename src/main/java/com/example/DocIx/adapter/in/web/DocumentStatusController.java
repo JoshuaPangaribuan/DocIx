@@ -2,7 +2,8 @@ package com.example.DocIx.adapter.in.web;
 
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
-import com.example.DocIx.domain.port.out.DocumentRepository;
+import com.example.DocIx.domain.model.DocumentStatus;
+import com.example.DocIx.domain.port.in.DocumentStatusUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,15 +14,15 @@ import java.util.Optional;
 @RequestMapping("/api/documents")
 public class DocumentStatusController {
 
-    private final DocumentRepository documentRepository;
+    private final DocumentStatusUseCase documentStatusUseCase;
 
-    public DocumentStatusController(DocumentRepository documentRepository) {
-        this.documentRepository = documentRepository;
+    public DocumentStatusController(DocumentStatusUseCase documentStatusUseCase) {
+        this.documentStatusUseCase = documentStatusUseCase;
     }
 
     @GetMapping("/{documentId}/status")
     public ResponseEntity<DocumentStatusResponse> getDocumentStatus(@PathVariable String documentId) {
-        Optional<Document> documentOpt = documentRepository.findById(DocumentId.of(documentId));
+        Optional<Document> documentOpt = documentStatusUseCase.getDocument(DocumentId.of(documentId));
 
         if (documentOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -43,8 +44,8 @@ public class DocumentStatusController {
     @GetMapping("/status/{status}")
     public ResponseEntity<List<DocumentStatusResponse>> getDocumentsByStatus(@PathVariable String status) {
         try {
-            List<Document> documents = documentRepository.findByStatus(
-                com.example.DocIx.domain.model.DocumentStatus.valueOf(status.toUpperCase())
+            List<Document> documents = documentStatusUseCase.getDocumentsByStatus(
+                DocumentStatus.valueOf(status.toUpperCase())
             );
 
             List<DocumentStatusResponse> responses = documents.stream()
