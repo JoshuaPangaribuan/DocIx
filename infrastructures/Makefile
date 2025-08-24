@@ -29,7 +29,7 @@ dev-up: ## Start development infrastructure
 
 dev-down: ## Stop development infrastructure
 	@echo "$(YELLOW)Stopping DocIx development infrastructure...$(NC)"
-	@docker-compose -f docker-compose.dev.yml down
+	@docker-compose -f docker-compose.dev.yml --env-file .env.dev down
 	@echo "$(GREEN)Development infrastructure stopped successfully$(NC)"
 
 dev-restart: ## Restart development infrastructure
@@ -43,7 +43,7 @@ dev-logs: ## View development infrastructure logs
 
 dev-clean: ## Clean development infrastructure (remove volumes)
 	@echo "$(RED)Cleaning DocIx development infrastructure...$(NC)"
-	@docker-compose -f docker-compose.dev.yml down --volumes --remove-orphans
+	@docker-compose -f docker-compose.dev.yml --env-file .env.dev down --volumes --remove-orphans
 	@echo "$(GREEN)Development infrastructure cleaned successfully$(NC)"
 
 # Production Environment Commands
@@ -54,7 +54,7 @@ prod-up: ## Start production infrastructure
 
 prod-down: ## Stop production infrastructure
 	@echo "$(YELLOW)Stopping DocIx production infrastructure...$(NC)"
-	@docker-compose -f docker-compose.yml down
+	@docker-compose -f docker-compose.yml --env-file .env.prod down
 	@echo "$(GREEN)Production infrastructure stopped successfully$(NC)"
 
 prod-restart: ## Restart production infrastructure
@@ -64,7 +64,7 @@ prod-restart: ## Restart production infrastructure
 	@echo "$(GREEN)Production infrastructure restarted successfully$(NC)"
 
 prod-logs: ## View production infrastructure logs
-	@docker-compose -f docker-compose.yml logs -f
+	@docker-compose -f docker-compose.yml --env-file .env.prod logs -f
 
 # Elasticsearch specific commands
 start-elasticsearch: ## Start Elasticsearch cluster

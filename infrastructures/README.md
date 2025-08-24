@@ -5,145 +5,211 @@ This directory contains all the infrastructure configuration files for the DocIx
 ## Services Overview
 
 ### Core Services
-- **PostgreSQL**: Primary database for metadata storage
-- **MinIO**: Object storage for PDF documents
-- **Elasticsearch**: Search engine for full-text search and indexing
-- **RabbitMQ**: Message broker for asynchronous document processing
+- **PostgreSQL 15**: Primary database for document metadata storage
+- **MinIO**: S3-compatible object storage for PDF documents
+- **Elasticsearch 8.12**: Search engine for full-text search and indexing
+- **RabbitMQ 3**: Message broker for asynchronous document processing
 
 ### Optional Services
-- **Kibana**: Elasticsearch monitoring and visualization
-- **Redis**: Caching layer (optional)
+- **Kibana 8.12**: Elasticsearch monitoring and visualization dashboard
+
+## Configuration Details
+
+Based on `application.properties`, the services are configured as follows:
+
+### Database Configuration
+- **Host**: localhost:5432
+- **Database**: docix
+- **Username**: docix_user
+- **Password**: docix_password
+- **Extensions**: uuid-ossp, pg_trgm (for full-text search)
+
+### MinIO Configuration
+- **API Endpoint**: http://localhost:9000
+- **Console**: http://localhost:9001
+- **Access Key**: minioadmin
+- **Secret Key**: minioadmin
+- **Bucket**: docix-documents (auto-created)
+
+### Elasticsearch Configuration
+- **Endpoint**: http://localhost:9200
+- **Security**: Disabled for development
+- **Memory**: 512MB (production), 256MB (development)
+
+### RabbitMQ Configuration
+- **AMQP Port**: 5672
+- **Management UI**: http://localhost:15672
+- **Username**: guest
+- **Password**: guest
+- **Queues**: document.processing (auto-created)
 
 ## Quick Start
 
+### Prerequisites
+- Docker and Docker Compose
+- At least 4GB available RAM
+- Ports 5432, 9000, 9001, 9200, 5672, 15672, 5601 available
+
 ### Development Environment
 ```bash
-# Start development infrastructure
-make dev-up
+# Start all development services
+docker-compose -f docker-compose.dev.yml up -d
 
-# Stop development infrastructure
-make dev-down
+# Start specific services only
+docker-compose -f docker-compose.dev.yml up -d postgres-dev minio-dev
 
 # View logs
-make dev-logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Stop all services
+docker-compose -f docker-compose.dev.yml down
 ```
 
 ### Production Environment
 ```bash
-# Start production infrastructure
-make prod-up
+# Start production infrastructure with application
+docker-compose up -d
 
-# Stop production infrastructure
-make prod-down
+# Start infrastructure only (without DocIx app)
+docker-compose up -d postgres minio elasticsearch rabbitmq
 
-# Deploy application
-make deploy
-```
+# View logs
+docker-compose logs -f
 
-## Environment Files
-
-Create `.env` files for different environments:
-
-### Development (.env.dev)
-```env
-COMPOSE_PROJECT_NAME=docix-dev
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin
-RABBITMQ_DEFAULT_USER=guest
-RABBITMQ_DEFAULT_PASS=guest
-ES_HEAP_SIZE=256m
-```
-
-### Production (.env.prod)
-```env
-COMPOSE_PROJECT_NAME=docix-prod
-POSTGRES_DB=docix
-POSTGRES_USER=docix
-POSTGRES_PASSWORD=your_secure_password
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=your_secure_password
-RABBITMQ_DEFAULT_USER=docix
-RABBITMQ_DEFAULT_PASS=your_secure_password
-ES_HEAP_SIZE=1g
+# Stop all services
+docker-compose down
 ```
 
 ## Service URLs
 
-### Development
-- Application: http://localhost:8080
-- MinIO Console: http://localhost:9001
-- RabbitMQ Management: http://localhost:15672
-- Elasticsearch: http://localhost:9200
-- Kibana: http://localhost:5601
+When running locally:
 
-### Production
-Same ports but with production security configurations.
+| Service | URL | Description |
+|---------|-----|-------------|
+| DocIx Application | http://localhost:8081 | Main application |
+| MinIO Console | http://localhost:9001 | Object storage management |
+| RabbitMQ Management | http://localhost:15672 | Message queue monitoring |
+| Elasticsearch | http://localhost:9200 | Search engine API |
+| Kibana | http://localhost:5601 | Elasticsearch dashboard |
+| PostgreSQL | localhost:5432 | Database connection |
 
-## Data Volumes
+## Environment Variables
 
-All services use Docker volumes for data persistence:
-- `postgres-data`: PostgreSQL database files
-- `minio-data`: MinIO object storage files
-- `rabbitmq-data`: RabbitMQ queue data
-- `esdata`: Elasticsearch indices
-
-## Security Notes
-
-### Development
-- Uses default credentials for ease of development
-- Security features are disabled for Elasticsearch
-
-### Production
-- Use strong passwords for all services
-- Enable security features
-- Use environment variables for sensitive data
-- Consider using Docker secrets
-
-## Monitoring & Health Checks
-
-All services include health checks:
-- Database connectivity checks
-- Service-specific health endpoints
-- Dependency waiting with health conditions
-
-## Backup & Recovery
-
-Backup important volumes:
-```bash
-# Backup PostgreSQL
-docker exec docix-postgres pg_dump -U docix docix > backup.sql
-
-# Backup MinIO
-docker exec docix-minio mc mirror /data /backup
-
-# Backup Elasticsearch
-docker exec docix-elasticsearch curl -X POST "localhost:9200/_snapshot/backup"
+### Database
+```env
+DATABASE_URL=jdbc:postgresql://localhost:5432/docix
+DATABASE_USERNAME=docix_user
+DATABASE_PASSWORD=docix_password
 ```
+
+### MinIO
+```env
+MINIO_URL=http://localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=docix-documents
+```
+
+### Elasticsearch
+```env
+ELASTICSEARCH_URL=http://localhost:9200
+```
+
+### RabbitMQ
+```env
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
+```
+
+### Document Processing
+```env
+DOCIX_PROCESSING_QUEUE_NAME=document.processing
+DOCIX_PROCESSING_EXCHANGE_NAME=document.exchange
+DOCIX_PROCESSING_ROUTING_KEY=document.process
+```
+
+## Health Checks
+
+All services include health checks for reliable startup:
+
+```bash
+# Check service health
+docker-compose ps
+
+# Check specific service logs
+docker-compose logs postgres
+docker-compose logs minio
+docker-compose logs elasticsearch
+docker-compose logs rabbitmq
+```
+
+## Data Persistence
+
+Data is persisted in Docker volumes:
+- `postgres-data`: Database files
+- `minio-data`: Uploaded documents
+- `esdata`: Elasticsearch indices
+- `rabbitmq-data`: Message queue data
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Port conflicts**: Ensure ports 5432, 9000, 9001, 5672, 15672, 9200, 5601 are available
-2. **Memory issues**: Adjust ES_JAVA_OPTS for Elasticsearch memory
-3. **Permission issues**: Check Docker volume permissions
 
-### Logs
+1. **Port conflicts**: Ensure ports are not in use by other services
+2. **Memory issues**: Elasticsearch requires sufficient memory
+3. **Permissions**: Ensure Docker has permission to create volumes
+
+### Reset Everything
 ```bash
-# View all service logs
-docker-compose logs -f
+# Stop and remove all containers and volumes
+docker-compose down -v
+docker-compose -f docker-compose.dev.yml down -v
 
-# View specific service logs
-docker-compose logs -f elasticsearch
+# Remove all DocIx-related volumes
+docker volume prune
 ```
 
-## Scaling
+### Service-specific Troubleshooting
 
-### Horizontal Scaling
-- Add more Elasticsearch nodes
-- Scale RabbitMQ with clustering
-- Use MinIO distributed mode
+#### PostgreSQL
+```bash
+# Connect to database
+docker exec -it docix-postgres psql -U docix_user -d docix
 
-### Vertical Scaling
-- Increase memory allocation
-- Add more CPU cores
-- Use SSD storage for better performance
+# Check database logs
+docker-compose logs postgres
+```
+
+#### MinIO
+```bash
+# Access MinIO console at http://localhost:9001
+# Default credentials: minioadmin / minioadmin
+```
+
+#### Elasticsearch
+```bash
+# Check cluster health
+curl http://localhost:9200/_cluster/health
+
+# Check indices
+curl http://localhost:9200/_cat/indices
+```
+
+#### RabbitMQ
+```bash
+# Access management UI at http://localhost:15672
+# Default credentials: guest / guest
+
+# Check queues
+curl http://guest:guest@localhost:15672/api/queues
+```
+
+## Production Considerations
+
+1. **Security**: Change default passwords and enable authentication
+2. **Monitoring**: Add Prometheus/Grafana for monitoring
+3. **Backup**: Implement backup strategies for all data stores
+4. **Scaling**: Consider clustering for high availability
+5. **Resource Limits**: Set appropriate memory and CPU limits

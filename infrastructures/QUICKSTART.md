@@ -9,16 +9,16 @@
 ### 1. Setup Infrastructure
 ```bash
 cd infrastructures
-setup.bat
+make dev-setup
 ```
 
 ### 2. Start Development Environment
 ```bash
 # Start all services
-docker-compose -f docker-compose.dev.yml up -d
+make dev-up
 
-# Check service status
-docker-compose -f docker-compose.dev.yml ps
+# View logs
+make dev-logs
 ```
 
 ### 3. Run DocIx Application
@@ -123,8 +123,6 @@ infrastructures/
 ├── .env.dev                     # Development variables
 ├── .env.prod                    # Production variables
 ├── Makefile                     # Management commands
-├── setup.bat                    # Windows setup script
-├── setup.sh                     # Linux/Mac setup script
 ├── config/
 │   ├── prometheus/             # Monitoring config
 │   └── rabbitmq/              # Message broker config

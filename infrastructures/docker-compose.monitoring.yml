@@ -1,8 +1,3 @@
-version: '3.8'
-
-# Docker Compose untuk monitoring stack DocIx
-# Includes Prometheus, Grafana, dan monitoring tools
-
 networks:
   docix-monitoring:
     driver: bridge

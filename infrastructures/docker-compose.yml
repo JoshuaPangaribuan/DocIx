@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   docix-network:
     driver: bridge
@@ -21,8 +19,8 @@ services:
     container_name: docix-postgres
     environment:
       POSTGRES_DB: docix
-      POSTGRES_USER: docix
-      POSTGRES_PASSWORD: docix123
+      POSTGRES_USER: docix_user
+      POSTGRES_PASSWORD: docix_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-scripts/postgres:/docker-entrypoint-initdb.d
@@ -31,7 +29,7 @@ services:
     networks:
       - docix-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docix"]
+      test: ["CMD-SHELL", "pg_isready -U docix_user"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -43,7 +41,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - minio-data:/data
     ports:
@@ -62,12 +60,12 @@ services:
     image: rabbitmq:3-management
     container_name: docix-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: docix
-      RABBITMQ_DEFAULT_PASS: docix123
-      RABBITMQ_DEFAULT_VHOST: docix
+      RABBITMQ_DEFAULT_USER: docix_user
+      RABBITMQ_DEFAULT_PASS: docix_password
+      RABBITMQ_DEFAULT_VHOST: /
+      RABBITMQ_ERLANG_COOKIE: "docix-secret-cookie"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-      - ./config/rabbitmq:/etc/rabbitmq/conf.d
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -126,23 +124,6 @@ services:
       timeout: 10s
       retries: 5
 
-  # Redis (Optional - for caching)
-  redis:
-    image: redis:7-alpine
-    container_name: docix-redis
-    command: redis-server --appendonly yes --requirepass docix123
-    volumes:
-      - ./data/redis:/data
-    ports:
-      - "6379:6379"
-    networks:
-      - docix-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   # DocIx Application (for production deployment)
   docix-app:
     build:
@@ -153,8 +134,8 @@ services:
       # Database Configuration
       DATABASE_URL: jdbc:postgresql://postgres:5432/docix
       DATABASE_DRIVER: org.postgresql.Driver
-      DATABASE_USERNAME: docix
-      DATABASE_PASSWORD: docix123
+      DATABASE_USERNAME: docix_user
+      DATABASE_PASSWORD: docix_password
       DATABASE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
 
       # Elasticsearch Configuration
@@ -163,19 +144,25 @@ services:
       # MinIO Configuration
       MINIO_URL: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
+      MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: docix-documents
 
       # RabbitMQ Configuration
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: docix
-      RABBITMQ_PASSWORD: docix123
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
+
+      # Document Processing Configuration
+      DOCIX_PROCESSING_QUEUE_NAME: document.processing
+      DOCIX_PROCESSING_EXCHANGE_NAME: document.exchange
+      DOCIX_PROCESSING_ROUTING_KEY: document.process
 
       # Application Configuration
       SPRING_PROFILES_ACTIVE: production
+      SERVER_PORT: 8080
     ports:
-      - "8080:8080"
+      - "8081:8080"
     networks:
       - docix-network
     depends_on:
