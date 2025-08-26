@@ -15,19 +15,19 @@ public class IndexingLogMapper {
         IndexingLogJpaEntity entity = new IndexingLogJpaEntity();
         entity.setId(indexingLog.getId());
         entity.setDocumentId(indexingLog.getDocumentId());
-        entity.setTotalSegments(indexingLog.getTotalSegments());
-        entity.setSegmentsIndexed(indexingLog.getSegmentsIndexed());
-        entity.setSegmentsFailed(indexingLog.getSegmentsFailed());
+        entity.setTotalPages(indexingLog.getTotalPages());
+        entity.setPagesIndexed(indexingLog.getPagesIndexed());
+        entity.setPagesFailed(indexingLog.getPagesFailed());
         entity.setIndexingStatus(mapIndexingStatus(indexingLog.getIndexingStatus()));
         entity.setCreatedAt(indexingLog.getCreatedAt());
         entity.setUpdatedAt(indexingLog.getUpdatedAt());
         entity.setErrorDetails(indexingLog.getErrorDetails());
 
-        // Map segment logs dengan relasi yang benar menggunakan helper method
-        if (indexingLog.getSegmentLogs() != null) {
-            for (IndexingSegmentLog segmentLog : indexingLog.getSegmentLogs()) {
-                IndexingSegmentLogJpaEntity segmentEntity = toSegmentJpaEntity(segmentLog, null);
-                entity.addSegmentLog(segmentEntity); // Menggunakan helper method
+        // Map page logs dengan relasi yang benar menggunakan helper method
+        if (indexingLog.getPageLogs() != null) {
+            for (IndexingPageLog pageLog : indexingLog.getPageLogs()) {
+                IndexingPageLogJpaEntity pageEntity = toPageJpaEntity(pageLog, null);
+                entity.addPageLog(pageEntity); // Menggunakan helper method
             }
         }
 
@@ -40,51 +40,51 @@ public class IndexingLogMapper {
         IndexingLog indexingLog = new IndexingLog(
                 entity.getId(),
                 entity.getDocumentId(),
-                entity.getTotalSegments(),
-                entity.getSegmentsIndexed(),
-                entity.getSegmentsFailed(),
+                entity.getTotalPages(),
+                entity.getPagesIndexed(),
+                entity.getPagesFailed(),
                 mapIndexingStatus(entity.getIndexingStatus()),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getErrorDetails()
         );
 
-        // Map segment logs
-        if (entity.getSegmentLogs() != null) {
-            List<IndexingSegmentLog> segmentLogs = entity.getSegmentLogs()
+        // Map page logs
+        if (entity.getPageLogs() != null) {
+            List<IndexingPageLog> pageLogs = entity.getPageLogs()
                     .stream()
-                    .map(this::toSegmentDomainModel)
+                    .map(this::toPageDomainModel)
                     .collect(Collectors.toList());
-            indexingLog.setSegmentLogs(segmentLogs);
+            indexingLog.setPageLogs(pageLogs);
         }
 
         return indexingLog;
     }
 
-    private IndexingSegmentLogJpaEntity toSegmentJpaEntity(IndexingSegmentLog segmentLog, IndexingLogJpaEntity parentEntity) {
-        if (segmentLog == null) return null;
+    private IndexingPageLogJpaEntity toPageJpaEntity(IndexingPageLog pageLog, IndexingLogJpaEntity parentEntity) {
+        if (pageLog == null) return null;
 
-        IndexingSegmentLogJpaEntity entity = new IndexingSegmentLogJpaEntity();
-        entity.setId(segmentLog.getId());
+        IndexingPageLogJpaEntity entity = new IndexingPageLogJpaEntity();
+        entity.setId(pageLog.getId());
         entity.setIndexingLog(parentEntity); // Set relasi parent
-        entity.setSegmentNumber(segmentLog.getSegmentNumber());
-        entity.setSegmentStatus(mapSegmentStatus(segmentLog.getSegmentStatus()));
-        entity.setIndexedAt(segmentLog.getIndexedAt());
-        entity.setErrorMessage(segmentLog.getErrorMessage());
-        entity.setRetryCount(segmentLog.getRetryCount());
-        entity.setCreatedAt(segmentLog.getCreatedAt());
+        entity.setPageNumber(pageLog.getPageNumber());
+        entity.setPageStatus(mapPageStatus(pageLog.getPageStatus()));
+        entity.setIndexedAt(pageLog.getIndexedAt());
+        entity.setErrorMessage(pageLog.getErrorMessage());
+        entity.setRetryCount(pageLog.getRetryCount());
+        entity.setCreatedAt(pageLog.getCreatedAt());
 
         return entity;
     }
 
-    private IndexingSegmentLog toSegmentDomainModel(IndexingSegmentLogJpaEntity entity) {
+    private IndexingPageLog toPageDomainModel(IndexingPageLogJpaEntity entity) {
         if (entity == null) return null;
 
-        return new IndexingSegmentLog(
+        return new IndexingPageLog(
                 entity.getId(),
                 entity.getIndexingLog().getId(),
-                entity.getSegmentNumber(),
-                mapSegmentStatus(entity.getSegmentStatus()),
+                entity.getPageNumber(),
+                mapPageStatus(entity.getPageStatus()),
                 entity.getIndexedAt(),
                 entity.getErrorMessage(),
                 entity.getRetryCount(),
@@ -104,6 +104,11 @@ public class IndexingLogMapper {
         };
     }
 
+    // Public method untuk digunakan oleh PersistenceAdapter
+    public IndexingLogJpaEntity.IndexingStatusEnum mapIndexingStatusToJpa(IndexingStatus status) {
+        return mapIndexingStatus(status);
+    }
+
     private IndexingStatus mapIndexingStatus(IndexingLogJpaEntity.IndexingStatusEnum status) {
         if (status == null) return IndexingStatus.PENDING;
 
@@ -116,23 +121,23 @@ public class IndexingLogMapper {
         };
     }
 
-    private IndexingSegmentLogJpaEntity.SegmentStatusEnum mapSegmentStatus(SegmentStatus status) {
-        if (status == null) return IndexingSegmentLogJpaEntity.SegmentStatusEnum.PENDING;
+    private IndexingPageLogJpaEntity.PageStatusEnum mapPageStatus(PageStatus status) {
+        if (status == null) return IndexingPageLogJpaEntity.PageStatusEnum.PENDING;
 
         return switch (status) {
-            case PENDING -> IndexingSegmentLogJpaEntity.SegmentStatusEnum.PENDING;
-            case INDEXED -> IndexingSegmentLogJpaEntity.SegmentStatusEnum.INDEXED;
-            case FAILED -> IndexingSegmentLogJpaEntity.SegmentStatusEnum.FAILED;
+            case PENDING -> IndexingPageLogJpaEntity.PageStatusEnum.PENDING;
+            case INDEXED -> IndexingPageLogJpaEntity.PageStatusEnum.INDEXED;
+            case FAILED -> IndexingPageLogJpaEntity.PageStatusEnum.FAILED;
         };
     }
 
-    private SegmentStatus mapSegmentStatus(IndexingSegmentLogJpaEntity.SegmentStatusEnum status) {
-        if (status == null) return SegmentStatus.PENDING;
+    private PageStatus mapPageStatus(IndexingPageLogJpaEntity.PageStatusEnum status) {
+        if (status == null) return PageStatus.PENDING;
 
         return switch (status) {
-            case PENDING -> SegmentStatus.PENDING;
-            case INDEXED -> SegmentStatus.INDEXED;
-            case FAILED -> SegmentStatus.FAILED;
+            case PENDING -> PageStatus.PENDING;
+            case INDEXED -> PageStatus.INDEXED;
+            case FAILED -> PageStatus.FAILED;
         };
     }
 }

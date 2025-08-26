@@ -16,14 +16,14 @@ public class IndexingLogJpaEntity {
     @Column(name = "document_id", nullable = false)
     private String documentId;
 
-    @Column(name = "total_segments", nullable = false)
-    private int totalSegments = 0;
+    @Column(name = "total_pages", nullable = false)
+    private int totalPages = 0;
 
-    @Column(name = "segments_indexed", nullable = false)
-    private int segmentsIndexed = 0;
+    @Column(name = "pages_indexed", nullable = false)
+    private int pagesIndexed = 0;
 
-    @Column(name = "segments_failed", nullable = false)
-    private int segmentsFailed = 0;
+    @Column(name = "pages_failed", nullable = false)
+    private int pagesFailed = 0;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "indexing_status", nullable = false)
@@ -39,7 +39,7 @@ public class IndexingLogJpaEntity {
     private String errorDetails;
 
     @OneToMany(mappedBy = "indexingLog", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<IndexingSegmentLogJpaEntity> segmentLogs = new ArrayList<>();
+    private List<IndexingPageLogJpaEntity> pageLogs = new ArrayList<>();
 
     // Constructors
     public IndexingLogJpaEntity() {}
@@ -50,15 +50,15 @@ public class IndexingLogJpaEntity {
         this.updatedAt = LocalDateTime.now();
     }
 
-    // Helper method untuk menambah segment log dengan relasi yang benar
-    public void addSegmentLog(IndexingSegmentLogJpaEntity segmentLog) {
-        segmentLogs.add(segmentLog);
-        segmentLog.setIndexingLog(this);
+    // Helper method untuk menambah page log dengan relasi yang benar
+    public void addPageLog(IndexingPageLogJpaEntity pageLog) {
+        pageLogs.add(pageLog);
+        pageLog.setIndexingLog(this);
     }
 
-    public void removeSegmentLog(IndexingSegmentLogJpaEntity segmentLog) {
-        segmentLogs.remove(segmentLog);
-        segmentLog.setIndexingLog(null);
+    public void removePageLog(IndexingPageLogJpaEntity pageLog) {
+        pageLogs.remove(pageLog);
+        pageLog.setIndexingLog(null);
     }
 
     // Getters dan Setters
@@ -68,14 +68,14 @@ public class IndexingLogJpaEntity {
     public String getDocumentId() { return documentId; }
     public void setDocumentId(String documentId) { this.documentId = documentId; }
 
-    public int getTotalSegments() { return totalSegments; }
-    public void setTotalSegments(int totalSegments) { this.totalSegments = totalSegments; }
+    public int getTotalPages() { return totalPages; }
+    public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
 
-    public int getSegmentsIndexed() { return segmentsIndexed; }
-    public void setSegmentsIndexed(int segmentsIndexed) { this.segmentsIndexed = segmentsIndexed; }
+    public int getPagesIndexed() { return pagesIndexed; }
+    public void setPagesIndexed(int pagesIndexed) { this.pagesIndexed = pagesIndexed; }
 
-    public int getSegmentsFailed() { return segmentsFailed; }
-    public void setSegmentsFailed(int segmentsFailed) { this.segmentsFailed = segmentsFailed; }
+    public int getPagesFailed() { return pagesFailed; }
+    public void setPagesFailed(int pagesFailed) { this.pagesFailed = pagesFailed; }
 
     public IndexingStatusEnum getIndexingStatus() { return indexingStatus; }
     public void setIndexingStatus(IndexingStatusEnum indexingStatus) { this.indexingStatus = indexingStatus; }
@@ -89,8 +89,8 @@ public class IndexingLogJpaEntity {
     public String getErrorDetails() { return errorDetails; }
     public void setErrorDetails(String errorDetails) { this.errorDetails = errorDetails; }
 
-    public List<IndexingSegmentLogJpaEntity> getSegmentLogs() { return segmentLogs; }
-    public void setSegmentLogs(List<IndexingSegmentLogJpaEntity> segmentLogs) { this.segmentLogs = segmentLogs; }
+    public List<IndexingPageLogJpaEntity> getPageLogs() { return pageLogs; }
+    public void setPageLogs(List<IndexingPageLogJpaEntity> pageLogs) { this.pageLogs = pageLogs; }
 
     public enum IndexingStatusEnum {
         PENDING, IN_PROGRESS, FULLY_INDEXED, PARTIALLY_INDEXED, FAILED

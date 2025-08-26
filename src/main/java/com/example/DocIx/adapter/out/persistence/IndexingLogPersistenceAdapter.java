@@ -38,7 +38,7 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
 
     @Override
     public List<IndexingLog> findByStatus(IndexingStatus status) {
-        IndexingLogJpaEntity.IndexingStatusEnum jpaStatus = mapToJpaStatus(status);
+        IndexingLogJpaEntity.IndexingStatusEnum jpaStatus = mapper.mapIndexingStatusToJpa(status);
         return jpaRepository.findByIndexingStatus(jpaStatus)
                 .stream()
                 .map(mapper::toDomainModel)
@@ -71,13 +71,5 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
         return jpaRepository.existsByDocumentId(documentId);
     }
 
-    private IndexingLogJpaEntity.IndexingStatusEnum mapToJpaStatus(IndexingStatus status) {
-        return switch (status) {
-            case PENDING -> IndexingLogJpaEntity.IndexingStatusEnum.PENDING;
-            case IN_PROGRESS -> IndexingLogJpaEntity.IndexingStatusEnum.IN_PROGRESS;
-            case FULLY_INDEXED -> IndexingLogJpaEntity.IndexingStatusEnum.FULLY_INDEXED;
-            case PARTIALLY_INDEXED -> IndexingLogJpaEntity.IndexingStatusEnum.PARTIALLY_INDEXED;
-            case FAILED -> IndexingLogJpaEntity.IndexingStatusEnum.FAILED;
-        };
-    }
+
 }

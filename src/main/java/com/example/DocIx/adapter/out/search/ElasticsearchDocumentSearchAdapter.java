@@ -4,7 +4,8 @@ import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResult;
-import com.example.DocIx.domain.service.DocumentSegmentationService;
+import com.example.DocIx.domain.port.out.PageExtractor;
+
 import com.example.DocIx.domain.util.LoggingUtil;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.SortOrder;
@@ -37,7 +38,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
 
     private static final Logger logger = LoggerFactory.getLogger(ElasticsearchDocumentSearchAdapter.class);
     private final ElasticsearchClient elasticsearchClient;
-    private static final String SEGMENTS_INDEX_NAME = "document_segments";
+    private static final String PAGES_INDEX_NAME = "document_pages";
 
     // Metrics
     private final Counter searchRequestsTotal;
@@ -78,47 +79,13 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
      */
     private void initializeIndices() {
         try {
-            createSegmentsIndexIfNotExists();
+            createPagesIndexIfNotExists();
         } catch (Exception e) {
             logger.warn("Warning: Failed to initialize Elasticsearch indices: {}", e.getMessage());
         }
     }
 
-    /**
-     * Create the document_segments index with proper mapping including Indonesian
-     * analyzer
-     */
-    private void createSegmentsIndexIfNotExists() {
-        try {
-            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(SEGMENTS_INDEX_NAME)).value();
 
-            if (!indexExists) {
-                elasticsearchClient.indices().create(c -> c
-                        .index(SEGMENTS_INDEX_NAME)
-                        .settings(s -> s
-                                .analysis(a -> a
-                                        .analyzer("indonesian_analyzer", an -> an
-                                                .standard(std -> std))))
-                        .mappings(m -> m
-                                .properties("documentId", p -> p.keyword(k -> k))
-                                .properties("fileName", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
-                                .properties("originalFileName", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
-                                .properties("extractedContent", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
-                                .properties("segmentNumber", p -> p.integer(i -> i))
-                                .properties("totalSegments", p -> p.integer(i -> i))
-                                .properties("uploader", p -> p.keyword(k -> k))
-                                .properties("uploadedAt", p -> p.date(d -> d))
-                                .properties("downloadUrl", p -> p.keyword(k -> k))));
-                logger.info("Created document_segments index with proper mapping and Indonesian analyzer");
-            }
-        } catch (Exception e) {
-            throw new SearchEngineException(SearchEngineException.ErrorCode.MAPPING_ERROR,
-                    "Failed to create document_segments index: " + e.getMessage(), e);
-        }
-    }
 
     @Override
     public void indexDocument(Document document) {
@@ -128,44 +95,35 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
     }
 
     /**
-     * Index a document segment with retry mechanism
+     * Index document page dengan retry mechanism
      */
-    public void indexDocument(DocumentSegmentationService.DocumentSegment segment) {
-        indexDocumentWithRetry(segment, 3); // 3 kali percobaan
-    }
-
-    /**
-     * Index document segment dengan retry mechanism
-     */
-    private void indexDocumentWithRetry(DocumentSegmentationService.DocumentSegment segment, int maxRetries) {
+    private void indexDocumentPageWithRetry(PageExtractor.DocumentPage page, int maxRetries) {
         long startTime = System.currentTimeMillis();
-        String documentId = segment.getDocumentId();
-        String safeFileName = LoggingUtil.safeFileName(segment.getFileName());
+        String documentId = String.valueOf(page.getDocumentId());
 
-        logger.info("Starting document segment indexing - DocumentId: {}, File: {}, Segment: {}/{}",
-                documentId, safeFileName, segment.getSegmentNumber(), segment.getTotalSegments());
+        logger.info("Starting document page indexing - DocumentId: {}, Page: {}",
+                documentId, page.getPageNumber());
 
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                DocumentSearchDocument searchDoc = new DocumentSearchDocument(
-                        segment.getDocumentId(),
-                        segment.getFileName(),
-                        segment.getOriginalFileName(),
-                        segment.getContent(),
-                        segment.getSegmentNumber(),
-                        segment.getTotalSegments(),
-                        segment.getUploader(),
-                        segment.getUploadedAt(),
-                        segment.getDownloadUrl());
+                DocumentPageDocument pageDoc = new DocumentPageDocument(
+                        String.valueOf(page.getDocumentId()),
+                        "",
+                        "",
+                        page.getContent(),
+                        page.getPageNumber(),
+                        "",
+                        "",
+                        "");
 
-                String segmentId = documentId + "_segment_" + segment.getSegmentNumber();
+                String pageId = page.getDocumentId() + "_page_" + page.getPageNumber();
 
-                IndexRequest<DocumentSearchDocument> indexRequest = IndexRequest.of(i -> i
-                        .index(SEGMENTS_INDEX_NAME)
-                        .id(segmentId)
-                        .document(searchDoc));
+                IndexRequest<DocumentPageDocument> indexRequest = IndexRequest.of(i -> i
+                        .index(PAGES_INDEX_NAME)
+                        .id(pageId)
+                        .document(pageDoc));
 
                 IndexResponse response = elasticsearchClient.index(indexRequest);
 
@@ -177,9 +135,9 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                 }
 
                 long duration = System.currentTimeMillis() - startTime;
-                logger.info("Document segment indexed successfully - DocumentId: {}, SegmentId: {}, " +
+                logger.info("Document page indexed successfully - DocumentId: {}, PageId: {}, " +
                         "Result: {}, Attempt: {}, Duration: {}ms",
-                        documentId, segmentId, response.result(), attempt, duration);
+                        documentId, pageId, response.result(), attempt, duration);
 
                 return; // Success, exit retry loop
 
@@ -188,10 +146,9 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                 String safeError = LoggingUtil.maskSensitiveData(e.getMessage());
 
                 if (attempt < maxRetries) {
-                    logger.warn("Failed to index document segment (attempt {}/{}) - DocumentId: {}, Segment: {}/{}, " +
+                    logger.warn("Failed to index document page (attempt {}/{}) - DocumentId: {}, Page: {}, " +
                             "Error: {}, Retrying...",
-                            attempt, maxRetries, documentId, segment.getSegmentNumber(),
-                            segment.getTotalSegments(), safeError);
+                            attempt, maxRetries, documentId, page.getPageNumber(), safeError);
 
                     // Wait before retry (exponential backoff)
                     try {
@@ -203,9 +160,9 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                 } else {
                     long duration = System.currentTimeMillis() - startTime;
                     logger.error(
-                            "Failed to index document segment after {} attempts - DocumentId: {}, Segment: {}/{}, " +
+                            "Failed to index document page after {} attempts - DocumentId: {}, Page: {}, " +
                                     "Duration: {}ms, Error: {}",
-                            maxRetries, documentId, segment.getSegmentNumber(), segment.getTotalSegments(),
+                            maxRetries, documentId, page.getPageNumber(),
                             duration, safeError, e);
                 }
             }
@@ -213,7 +170,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
 
         // If all attempts failed
         throw new SearchEngineException(SearchEngineException.ErrorCode.INDEX_ERROR,
-                "Failed to index document segment after " + maxRetries + " attempts: " +
+                "Failed to index document page after " + maxRetries + " attempts: " +
                         (lastException != null ? lastException.getMessage() : "Unknown error"),
                 lastException);
     }
@@ -221,19 +178,18 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
     @Override
     public void deleteDocument(DocumentId documentId) {
         try {
-            // Only delete from segments index since all documents are now segmented
-            deleteDocumentSegments(documentId);
-
+            // Delete from pages index since all documents are now page-based
+            deleteDocumentPages(documentId);
         } catch (Exception e) {
-            throw new SearchEngineException("Failed to delete document from index: " + documentId, e);
+            throw new SearchEngineException("Failed to delete document: " + documentId, e);
         }
     }
 
     @Override
     public List<SearchResult> search(String query, int page, int size) {
         try {
-            // Gunakan searchSegments untuk konsistensi
-            return searchSegments(query, page, size);
+            // Gunakan searchPages untuk konsistensi
+            return searchPages(query, page, size);
         } catch (Exception e) {
             throw new SearchEngineException("Failed to search documents", e);
         }
@@ -248,7 +204,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                             .query(query)));
 
             SearchRequest request = SearchRequest.of(s -> s
-                    .index(SEGMENTS_INDEX_NAME)
+                    .index(PAGES_INDEX_NAME)
                     .query(autocompleteQuery)
                     .size(maxSuggestions * 2) // Get more to filter unique suggestions
                     .source(src -> src.filter(f -> f.includes("content"))));
@@ -285,83 +241,133 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
         }
     }
 
+
+
+
+
     /**
-     * Index a document as segments for better handling of large content
-     * 
-     * @param document     The document to index
-     * @param textSegments List of text segments to index separately
+     * Create the document_pages index with proper mapping
      */
-    public void indexDocumentSegments(Document document, List<String> textSegments) {
+    private void createPagesIndexIfNotExists() {
         try {
-            if (!document.isProcessed() || textSegments == null || textSegments.isEmpty()) {
-                return; // Only index processed documents with content
+            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(PAGES_INDEX_NAME)).value();
+
+            if (!indexExists) {
+                elasticsearchClient.indices().create(c -> c
+                        .index(PAGES_INDEX_NAME)
+                        .settings(s -> s
+                                .analysis(a -> a
+                                        .analyzer("indonesian_analyzer", an -> an
+                                                .standard(std -> std))))
+                        .mappings(m -> m
+                                .properties("documentId", p -> p.keyword(k -> k))
+                                .properties("fileName", p -> p
+                                        .text(t -> t.analyzer("english_analyzer")))
+                                .properties("originalFileName", p -> p
+                                        .text(t -> t.analyzer("english_analyzer")))
+                                .properties("content", p -> p
+                                        .text(t -> t.analyzer("english_analyzer")))
+                                .properties("pageNumber", p -> p.integer(i -> i))
+                                .properties("uploader", p -> p.keyword(k -> k))
+                                .properties("uploadedAt", p -> p.date(d -> d))
+                                .properties("downloadUrl", p -> p.keyword(k -> k))));
+                logger.info("Created document_pages index with proper mapping");
             }
-
-            // First, delete any existing segments for this document
-            deleteDocumentSegments(document.getId());
-
-            // Index each segment
-            for (int i = 0; i < textSegments.size(); i++) {
-                DocumentSegment segment = new DocumentSegment(
-                        document.getId().getValue(),
-                        document.getFileName(),
-                        document.getOriginalFileName(),
-                        textSegments.get(i),
-                        i + 1, // segment number (1-based)
-                        textSegments.size(), // total segments
-                        document.getUploader(),
-                        document.getUploadedAt().toString(),
-                        document.getDownloadUrl());
-
-                String segmentId = document.getId().getValue() + "_segment_" + (i + 1);
-
-                IndexRequest<DocumentSegment> request = IndexRequest.of(idx -> idx
-                        .index(SEGMENTS_INDEX_NAME)
-                        .id(segmentId)
-                        .document(segment));
-
-                elasticsearchClient.index(request);
-            }
-
         } catch (Exception e) {
-            throw new SearchEngineException("Failed to index document segments: " + document.getId(), e);
+            throw new SearchEngineException(SearchEngineException.ErrorCode.MAPPING_ERROR,
+                    "Failed to create document_pages index: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Delete all segments for a specific document
+     * Index a single document page
      */
-    public void deleteDocumentSegments(DocumentId documentId) {
+    @Override
+    public void indexDocumentPage(PageExtractor.DocumentPage page) {
+        indexDocumentPageWithRetry(page, 3);
+    }
+
+    /**
+     * Index a document as pages for page-based indexing
+     * 
+     * @param document The document to index
+     * @param pages List of DocumentPage objects to index separately
+     */
+    public void indexDocumentPages(Document document, List<PageExtractor.DocumentPage> pages) {
         try {
-            // Check if the segments index exists first
-            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(SEGMENTS_INDEX_NAME)).value();
+            if (!document.isProcessed() || pages == null || pages.isEmpty()) {
+                return; // Only index processed documents with content
+            }
+
+            // Create pages index if not exists
+            createPagesIndexIfNotExists();
+
+            // First, delete any existing pages for this document
+            deleteDocumentPages(document.getId());
+
+            // Index each page
+            for (PageExtractor.DocumentPage page : pages) {
+                DocumentPageDocument pageDoc = new DocumentPageDocument(
+                        String.valueOf(page.getDocumentId()),
+                        document.getFileName(),
+                        document.getOriginalFileName(),
+                        page.getContent(),
+                        page.getPageNumber(),
+                        document.getUploader(),
+                        document.getUploadedAt().toString(),
+                        document.getDownloadUrl());
+
+                String pageId = page.getDocumentId() + "_page_" + page.getPageNumber();
+
+                IndexRequest<DocumentPageDocument> request = IndexRequest.of(idx -> idx
+                        .index(PAGES_INDEX_NAME)
+                        .id(pageId)
+                        .document(pageDoc));
+
+                elasticsearchClient.index(request);
+            }
+
+            logger.info("Successfully indexed {} pages for document: {}", pages.size(), document.getId().getValue());
+
+        } catch (Exception e) {
+            throw new SearchEngineException("Failed to index document pages: " + document.getId(), e);
+        }
+    }
+
+    /**
+     * Delete all pages for a specific document
+     */
+    public void deleteDocumentPages(DocumentId documentId) {
+        try {
+            // Check if the pages index exists first
+            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(PAGES_INDEX_NAME)).value();
 
             if (!indexExists) {
-                // Index doesn't exist yet, so no segments to delete
+                // Index doesn't exist yet, so no pages to delete
                 return;
             }
 
-            // Delete by query to remove all segments for this document
+            // Delete by query to remove all pages for this document
             Query deleteQuery = Query.of(q -> q
                     .term(t -> t
                             .field("documentId")
                             .value(documentId.getValue())));
 
             elasticsearchClient.deleteByQuery(dbq -> dbq
-                    .index(SEGMENTS_INDEX_NAME)
+                    .index(PAGES_INDEX_NAME)
                     .query(deleteQuery));
 
         } catch (Exception e) {
-            throw new SearchEngineException("Failed to delete document segments: " + documentId, e);
+            throw new SearchEngineException("Failed to delete document pages: " + documentId, e);
         }
     }
 
     /**
-     * Search across document segments with enhanced relevance using field
+     * Search across document pages with enhanced relevance using field
      * collapsing
      */
-    public List<SearchResult> searchSegments(String query, int page, int size) {
-        Span span = tracer.spanBuilder("searchSegments")
+    public List<SearchResult> searchPages(String query, int page, int size) {
+        Span span = tracer.spanBuilder("searchPages")
                 .setAttribute("query", query.length() > 50 ? query.substring(0, 50) + "..." : query)
                 .setAttribute("page", page)
                 .setAttribute("size", size)
@@ -374,24 +380,24 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             String traceId = span.getSpanContext().getTraceId();
             MDC.put("traceId", traceId);
 
-            logger.info("Melakukan pencarian segment - Query: '{}', Page: {}, Size: {}, TraceId: {}",
+            logger.info("Melakukan pencarian page - Query: '{}', Page: {}, Size: {}, TraceId: {}",
                     query.length() > 50 ? query.substring(0, 50) + "..." : query, page, size, traceId);
 
-            createSegmentsIndexIfNotExists();
+            createPagesIndexIfNotExists();
 
-            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(SEGMENTS_INDEX_NAME)).value();
+            boolean indexExists = elasticsearchClient.indices().exists(e -> e.index(PAGES_INDEX_NAME)).value();
             if (!indexExists) {
-                logger.warn("Index document_segments belum ada, mengembalikan hasil kosong");
+                logger.warn("Index document_pages belum ada, mengembalikan hasil kosong");
                 return new ArrayList<>();
             }
 
-            long documentCount = elasticsearchClient.count(c -> c.index(SEGMENTS_INDEX_NAME)).count();
+            long documentCount = elasticsearchClient.count(c -> c.index(PAGES_INDEX_NAME)).count();
             if (documentCount == 0) {
-                logger.warn("Tidak ada dokumen di index segments, mengembalikan hasil kosong");
+                logger.warn("Tidak ada dokumen di index pages, mengembalikan hasil kosong");
                 return new ArrayList<>();
             }
 
-            logger.debug("Ditemukan {} dokumen di index segments", documentCount);
+            logger.debug("Ditemukan {} dokumen di index pages", documentCount);
 
             // Build query
             final Query searchQuery;
@@ -405,7 +411,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                 Query primaryQuery = Query.of(q -> q
                         .multiMatch(m -> m
                                 .query(query)
-                                .fields("fileName^3", "originalFileName^3", "extractedContent^5")
+                                .fields("fileName^3", "originalFileName^3", "content^5")
                                 .type(TextQueryType.BestFields)
                                 .fuzziness("AUTO")
                                 .minimumShouldMatch("50%") // Turunkan dari 75% ke 50%
@@ -416,7 +422,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                         .bool(b -> b
                                 .should(s -> s
                                         .wildcard(w -> w
-                                                .field("extractedContent")
+                                                .field("content")
                                                 .value("*" + query.toLowerCase() + "*")
                                                 .boost(1.0f)))
                                 .should(s -> s
@@ -444,14 +450,14 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
 
             // Build search request with field collapsing and stable sorting
             SearchRequest request = SearchRequest.of(s -> s
-                    .index(SEGMENTS_INDEX_NAME)
+                    .index(PAGES_INDEX_NAME)
                     .query(searchQuery)
                     .from(page * size)
                     .size(size)
                     .sort(sort -> sort.score(sc -> sc.order(SortOrder.Desc)))
                     .sort(sort -> sort.field(f -> f.field("_id").order(SortOrder.Asc)))
                     .highlight(h -> h
-                            .fields("extractedContent", hf -> hf
+                            .fields("content", hf -> hf
                                     .fragmentSize(300)
                                     .numberOfFragments(1)
                                     .preTags("<mark>")
@@ -468,8 +474,8 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                                     .postTags("</mark>"))));
 
             logger.debug("Menjalankan query Elasticsearch...");
-            SearchResponse<DocumentSearchDocument> response = elasticsearchClient.search(request,
-                    DocumentSearchDocument.class);
+            SearchResponse<DocumentPageDocument> response = elasticsearchClient.search(request,
+                    DocumentPageDocument.class);
 
             long totalHits = response.hits().total() != null ? response.hits().total().value() : 0;
             logger.info("Query berhasil - Total hits: {}, Returned: {}", totalHits, response.hits().hits().size());
@@ -477,39 +483,39 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             List<SearchResult> results = new ArrayList<>();
             int emptyHighlights = 0;
 
-            for (Hit<DocumentSearchDocument> hit : response.hits().hits()) {
-                DocumentSearchDocument segment = hit.source();
+            for (Hit<DocumentPageDocument> hit : response.hits().hits()) {
+                DocumentPageDocument pageDoc = hit.source();
 
-                if (segment == null) {
-                    logger.warn("Segment null ditemukan, dilewati");
+                if (pageDoc == null) {
+                    logger.warn("Page null ditemukan, dilewati");
                     continue;
                 }
 
-                String highlightedContent = extractHighlight(hit, segment, query);
+                String highlightedContent = extractHighlightFromPage(hit, pageDoc, query);
 
                 if (highlightedContent.isEmpty()) {
                     emptyHighlights++;
                 }
 
-                logger.debug("Highlighted content untuk segment {}: '{}'",
-                        segment.getSegmentNumber(),
+                logger.debug("Highlighted content untuk page {}: '{}'",
+                        pageDoc.getPageNumber(),
                         highlightedContent.length() > 50 ? highlightedContent.substring(0, 50) + "..."
                                 : highlightedContent);
 
                 SearchResult result = new SearchResult(
-                        DocumentId.of(segment.getDocumentId()),
-                        segment.getOriginalFileName() != null ? segment.getOriginalFileName() : segment.getFileName(),
+                        DocumentId.of(pageDoc.getDocumentId()),
+                        pageDoc.getOriginalFileName() != null ? pageDoc.getOriginalFileName() : pageDoc.getFileName(),
                         highlightedContent,
                         hit.score() != null ? hit.score() : 0.0);
 
                 // Set download URL
-                if (segment.getDownloadUrl() != null) {
-                    result.setDownloadUrl(segment.getDownloadUrl());
+                if (pageDoc.getDownloadUrl() != null) {
+                    result.setDownloadUrl(pageDoc.getDownloadUrl());
                 } else {
-                    result.setDownloadUrl("/api/documents/download/" + segment.getDocumentId());
+                    result.setDownloadUrl("/api/documents/download/" + pageDoc.getDocumentId());
                 }
 
-                result.setSegmentInfo(segment.getSegmentNumber(), segment.getTotalSegments());
+                result.setPageInfo(pageDoc.getPageNumber());
                 results.add(result);
             }
 
@@ -542,7 +548,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                     .increment();
             logger.error("Error tidak terduga saat pencarian: {}", e.getMessage(), e);
             throw new SearchEngineException(SearchEngineException.ErrorCode.UNKNOWN_ERROR,
-                    "Gagal melakukan pencarian document segments: " + e.getMessage(), e);
+                    "Gagal melakukan pencarian document pages: " + e.getMessage(), e);
         } finally {
             sample.stop(searchLatencyTimer);
             span.end();
@@ -551,16 +557,16 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
     }
 
     /**
-     * Extract highlight with consistent priority: extractedContent > fileName >
+     * Extract highlight with consistent priority: content > fileName >
      * originalFileName
      */
-    private String extractHighlight(Hit<DocumentSearchDocument> hit, DocumentSearchDocument segment, String query) {
+    private String extractHighlightFromPage(Hit<DocumentPageDocument> hit, DocumentPageDocument page, String query) {
         String highlightedContent = "";
 
-        // Priority: extractedContent > fileName > originalFileName
+        // Priority: content > fileName > originalFileName
         if (hit.highlight() != null) {
-            if (hit.highlight().get("extractedContent") != null && !hit.highlight().get("extractedContent").isEmpty()) {
-                highlightedContent = String.join(" ", hit.highlight().get("extractedContent"));
+            if (hit.highlight().get("content") != null && !hit.highlight().get("content").isEmpty()) {
+                highlightedContent = String.join(" ", hit.highlight().get("content"));
             } else if (hit.highlight().get("fileName") != null && !hit.highlight().get("fileName").isEmpty()) {
                 highlightedContent = String.join(" ", hit.highlight().get("fileName"));
             } else if (hit.highlight().get("originalFileName") != null
@@ -570,8 +576,8 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
         }
 
         // Snippet fallback if highlight is empty
-        if (highlightedContent.isEmpty() && segment.getExtractedContent() != null) {
-            highlightedContent = createSnippet(segment.getExtractedContent(), query, 300);
+        if (highlightedContent.isEmpty() && page.getContent() != null) {
+            highlightedContent = createSnippet(page.getContent(), query, 300);
         }
 
         return highlightedContent;
@@ -618,15 +624,15 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
     public boolean documentExists(String documentId) {
         try {
             SearchRequest searchRequest = SearchRequest.of(s -> s
-                    .index(SEGMENTS_INDEX_NAME)
+                    .index(PAGES_INDEX_NAME)
                     .query(q -> q
                             .term(t -> t
                                     .field("documentId")
                                     .value(documentId)))
                     .size(1));
 
-            SearchResponse<DocumentSearchDocument> response = elasticsearchClient.search(searchRequest,
-                    DocumentSearchDocument.class);
+            SearchResponse<DocumentPageDocument> response = elasticsearchClient.search(searchRequest,
+                    DocumentPageDocument.class);
             return response.hits().total().value() > 0;
 
         } catch (Exception e) {
@@ -635,32 +641,31 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
         }
     }
 
+
+
     /**
-     * Inner class DocumentSegment untuk kompatibilitas dengan kode lama
+     * Inner class for Elasticsearch page document structure
      */
-    public static class DocumentSegment {
+    public static class DocumentPageDocument {
         private String documentId;
         private String fileName;
         private String originalFileName;
-        private String extractedContent;
-        private int segmentNumber;
-        private int totalSegments;
+        private String content;
+        private int pageNumber;
         private String uploader;
         private String uploadedAt;
         private String downloadUrl;
 
-        public DocumentSegment() {
+        public DocumentPageDocument() {
         }
 
-        public DocumentSegment(String documentId, String fileName, String originalFileName,
-                String extractedContent, int segmentNumber, int totalSegments,
-                String uploader, String uploadedAt, String downloadUrl) {
+        public DocumentPageDocument(String documentId, String fileName, String originalFileName,
+                String content, int pageNumber, String uploader, String uploadedAt, String downloadUrl) {
             this.documentId = documentId;
             this.fileName = fileName;
             this.originalFileName = originalFileName;
-            this.extractedContent = extractedContent;
-            this.segmentNumber = segmentNumber;
-            this.totalSegments = totalSegments;
+            this.content = content;
+            this.pageNumber = pageNumber;
             this.uploader = uploader;
             this.uploadedAt = uploadedAt;
             this.downloadUrl = downloadUrl;
@@ -691,142 +696,20 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             this.originalFileName = originalFileName;
         }
 
-        public String getExtractedContent() {
-            return extractedContent;
-        }
-
-        public void setExtractedContent(String extractedContent) {
-            this.extractedContent = extractedContent;
-        }
-
-        public int getSegmentNumber() {
-            return segmentNumber;
-        }
-
-        public void setSegmentNumber(int segmentNumber) {
-            this.segmentNumber = segmentNumber;
-        }
-
-        public int getTotalSegments() {
-            return totalSegments;
-        }
-
-        public void setTotalSegments(int totalSegments) {
-            this.totalSegments = totalSegments;
-        }
-
-        public String getUploader() {
-            return uploader;
-        }
-
-        public void setUploader(String uploader) {
-            this.uploader = uploader;
-        }
-
-        public String getUploadedAt() {
-            return uploadedAt;
-        }
-
-        public void setUploadedAt(String uploadedAt) {
-            this.uploadedAt = uploadedAt;
-        }
-
-        public String getDownloadUrl() {
-            return downloadUrl;
-        }
-
-        public void setDownloadUrl(String downloadUrl) {
-            this.downloadUrl = downloadUrl;
-        }
-    }
-
-    /**
-     * Inner class for Elasticsearch document structure with extractedContent field
-     */
-    public static class DocumentSearchDocument {
-        private String documentId;
-        private String fileName;
-        private String originalFileName;
-        private String extractedContent;
-        private int segmentNumber;
-        private int totalSegments;
-        private String uploader;
-        private String uploadedAt;
-        private String downloadUrl;
-
-        public DocumentSearchDocument() {
-        }
-
-        public DocumentSearchDocument(String documentId, String fileName, String originalFileName,
-                String extractedContent, int segmentNumber, int totalSegments,
-                String uploader, String uploadedAt, String downloadUrl) {
-            this.documentId = documentId;
-            this.fileName = fileName;
-            this.originalFileName = originalFileName;
-            this.extractedContent = extractedContent;
-            this.segmentNumber = segmentNumber;
-            this.totalSegments = totalSegments;
-            this.uploader = uploader;
-            this.uploadedAt = uploadedAt;
-            this.downloadUrl = downloadUrl;
-        }
-
-        // Getters and setters
-        public String getDocumentId() {
-            return documentId;
-        }
-
-        public void setDocumentId(String documentId) {
-            this.documentId = documentId;
-        }
-
-        public String getFileName() {
-            return fileName;
-        }
-
-        public void setFileName(String fileName) {
-            this.fileName = fileName;
-        }
-
-        public String getOriginalFileName() {
-            return originalFileName;
-        }
-
-        public void setOriginalFileName(String originalFileName) {
-            this.originalFileName = originalFileName;
-        }
-
-        public String getExtractedContent() {
-            return extractedContent;
-        }
-
-        public void setExtractedContent(String extractedContent) {
-            this.extractedContent = extractedContent;
-        }
-
-        // Backward compatibility
         public String getContent() {
-            return extractedContent;
+            return content;
         }
 
         public void setContent(String content) {
-            this.extractedContent = content;
+            this.content = content;
         }
 
-        public int getSegmentNumber() {
-            return segmentNumber;
+        public int getPageNumber() {
+            return pageNumber;
         }
 
-        public void setSegmentNumber(int segmentNumber) {
-            this.segmentNumber = segmentNumber;
-        }
-
-        public int getTotalSegments() {
-            return totalSegments;
-        }
-
-        public void setTotalSegments(int totalSegments) {
-            this.totalSegments = totalSegments;
+        public void setPageNumber(int pageNumber) {
+            this.pageNumber = pageNumber;
         }
 
         public String getUploader() {

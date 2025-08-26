@@ -7,7 +7,7 @@ This directory contains all the infrastructure configuration files for the DocIx
 ### Core Services
 - **PostgreSQL 15**: Primary database for document metadata storage
 - **MinIO**: S3-compatible object storage for PDF documents
-- **Elasticsearch 8.12**: Search engine for full-text search and indexing
+- **Elasticsearch 8.12**: Search engine for page-based document indexing and search
 - **RabbitMQ 3**: Message broker for asynchronous document processing
 
 ### Optional Services
@@ -22,7 +22,7 @@ Based on `application.properties`, the services are configured as follows:
 - **Database**: docix
 - **Username**: docix_user
 - **Password**: docix_password
-- **Extensions**: uuid-ossp, pg_trgm (for full-text search)
+- **Extensions**: uuid-ossp, pg_trgm (for enhanced search capabilities)
 
 ### MinIO Configuration
 - **API Endpoint**: http://localhost:9000

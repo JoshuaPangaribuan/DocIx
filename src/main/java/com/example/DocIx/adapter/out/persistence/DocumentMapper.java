@@ -40,6 +40,9 @@ public class DocumentMapper {
 
         // Apply status and download URL based on JPA entity state
         switch (jpaEntity.getStatus()) {
+            case UPLOADED -> {
+                // UPLOADED is the default state, no additional operations needed
+            }
             case PROCESSING -> document.markAsProcessing();
             case PROCESSED -> {
                 if (jpaEntity.getDownloadUrl() != null) {
@@ -51,7 +54,6 @@ public class DocumentMapper {
                     document.markAsFailed(jpaEntity.getErrorMessage());
                 }
             }
-            // UPLOADED is the default state
             default -> throw new IllegalArgumentException("Unexpected value: " + jpaEntity.getStatus());
         }
 

@@ -31,13 +31,12 @@ public interface DocumentWebMapper {
     // Search mappings - use default method to handle hasNext/hasPrevious properly
     default SearchResponse toSearchResponse(SearchDocumentUseCase.SearchResponse searchResponse) {
         return new SearchResponse(
-            toSearchResultDtoList(searchResponse.getResults()),
-            searchResponse.getTotalHits(),
-            searchResponse.getPage(),
-            searchResponse.getSize(),
-            searchResponse.hasNext(),
-            searchResponse.hasPrevious()
-        );
+                toSearchResultDtoList(searchResponse.getResults()),
+                searchResponse.getTotalHits(),
+                searchResponse.getPage(),
+                searchResponse.getSize(),
+                searchResponse.hasNext(),
+                searchResponse.hasPrevious());
     }
 
     @Mapping(target = "documentId", source = "documentId.value")

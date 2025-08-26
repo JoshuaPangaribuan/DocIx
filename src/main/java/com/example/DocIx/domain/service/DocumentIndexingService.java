@@ -1,9 +1,9 @@
 package com.example.DocIx.domain.service;
 
-import com.example.DocIx.adapter.out.persistence.IndexingSegmentLogJpaEntity;
+import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity;
 import com.example.DocIx.domain.model.*;
 import com.example.DocIx.domain.port.out.*;
-import com.example.DocIx.adapter.out.persistence.IndexingSegmentLogJpaRepository;
+import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,10 +25,10 @@ public class DocumentIndexingService {
     private final DocumentRepository documentRepository;
     private final DocumentStorage documentStorage;
     private final ContentExtractor contentExtractor;
-    private final DocumentSegmentationService segmentationService;
+    private final PageExtractor pageExtractor;
     private final DocumentSearchEngine searchEngine;
     private final IndexingLogRepository indexingLogRepository;
-    private final IndexingSegmentLogJpaRepository segmentLogRepository;
+    private final IndexingPageLogJpaRepository pageLogRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -38,27 +39,26 @@ public class DocumentIndexingService {
     public DocumentIndexingService(
             DocumentRepository documentRepository,
             IndexingLogRepository indexingLogRepository,
-            IndexingSegmentLogJpaRepository segmentLogRepository,
+            IndexingPageLogJpaRepository pageLogRepository,
             DocumentStorage documentStorage,
             ContentExtractor contentExtractor,
-            DocumentSegmentationService segmentationService,
+            PageExtractor pageExtractor,
             DocumentSearchEngine searchEngine) {
         this.documentRepository = documentRepository;
         this.indexingLogRepository = indexingLogRepository;
-        this.segmentLogRepository = segmentLogRepository;
+        this.pageLogRepository = pageLogRepository;
         this.documentStorage = documentStorage;
         this.contentExtractor = contentExtractor;
-        this.segmentationService = segmentationService;
+        this.pageExtractor = pageExtractor;
         this.searchEngine = searchEngine;
     }
 
     /**
      * Proses pengindeksan dokumen secara asynchronous
      * 1. Ambil file PDF dari MinIO
-     * 2. Ekstrak konten
-     * 3. Pecah menjadi segmen
-     * 4. Indeks setiap segmen ke Elasticsearch
-     * 5. Update status indexing
+     * 2. Ekstrak konten per halaman
+     * 3. Indeks setiap halaman ke Elasticsearch
+     * 4. Update status indexing
      */
     @Transactional
     public void processDocumentIndexing(String documentId) {
@@ -88,34 +88,30 @@ public class DocumentIndexingService {
                 return;
             }
 
-            // 4. Ekstrak konten PDF
-            String extractedText = extractContentFromPdf(fileContent, document);
-            if (extractedText == null || extractedText.trim().isEmpty()) {
-                handleIndexingFailure(indexingLog, document, "Gagal mengekstrak konten dari PDF atau file kosong");
+            // 4. Ekstrak konten PDF per halaman
+            List<PageExtractor.DocumentPage> pages = extractPagesFromPdf(fileContent, document);
+            if (pages == null || pages.isEmpty()) {
+                handleIndexingFailure(indexingLog, document, "Gagal mengekstrak halaman dari PDF atau file kosong");
                 return;
             }
 
-            // 5. Pecah dokumen menjadi segmen
-            List<DocumentSegmentationService.DocumentSegment> segments =
-                segmentationService.segmentDocument(extractedText, document);
+            logger.info("Document {} berhasil diekstrak menjadi {} halaman", documentId, pages.size());
 
-            logger.info("Document {} dipecah menjadi {} segmen", documentId, segments.size());
-
-            // 6. Simpan IndexingLog dulu untuk mendapatkan ID, kemudian inisialisasi segmen
-            indexingLog.setTotalSegments(segments.size());
+            // 5. Simpan IndexingLog dulu untuk mendapatkan ID, kemudian inisialisasi page logs
+            indexingLog.setTotalPages(pages.size());
             indexingLog.setIndexingStatus(IndexingStatus.IN_PROGRESS);
             indexingLog.setUpdatedAt(java.time.LocalDateTime.now());
 
             // Simpan dulu untuk mendapatkan ID
             indexingLog = indexingLogRepository.save(indexingLog);
 
-            // Sekarang baru inisialisasi segment logs dengan ID yang sudah ada
-            initializeSegmentLogs(indexingLog, segments.size());
+            // Sekarang baru inisialisasi page logs dengan ID yang sudah ada
+            initializePageLogs(indexingLog, pages.size());
 
-            // 7. Indeks setiap segmen
-            indexDocumentSegments(segments, indexingLog);
+            // 6. Indeks setiap halaman
+            indexDocumentPages(pages, indexingLog);
 
-            // 8. Update final status document
+            // 7. Update final status document
             updateDocumentFinalStatus(document, indexingLog);
 
             logger.info("Proses indexing selesai untuk document: {} dengan status: {}",
@@ -127,26 +123,26 @@ public class DocumentIndexingService {
         }
     }
 
-    private void initializeSegmentLogs(IndexingLog indexingLog, int totalSegments) {
+    private void initializePageLogs(IndexingLog indexingLog, int totalPages) {
         try {
             Long indexingLogId = indexingLog.getId();
 
-            // Strategi yang lebih aman: hapus segment logs lama dengan native query
-            logger.debug("Menghapus segment logs lama untuk indexing_log_id: {}", indexingLogId);
+            // Strategi yang lebih aman: hapus page logs lama dengan native query
+            logger.debug("Menghapus page logs lama untuk indexing_log_id: {}", indexingLogId);
 
             // Hapus dari collection dalam memory terlebih dahulu
-            if (indexingLog.getSegmentLogs() != null) {
-                indexingLog.getSegmentLogs().clear();
+            if (indexingLog.getPageLogs() != null) {
+                indexingLog.getPageLogs().clear();
             }
 
-            // Simpan IndexingLog tanpa segment logs terlebih dahulu
+            // Simpan IndexingLog tanpa page logs terlebih dahulu
             indexingLog = indexingLogRepository.save(indexingLog);
 
             // Flush menggunakan EntityManager
             entityManager.flush();
 
-            // Hapus segment logs yang ada di database
-            segmentLogRepository.deleteByIndexingLogId(indexingLogId);
+            // Hapus page logs yang ada di database
+            pageLogRepository.deleteByIndexingLogId(indexingLogId);
 
             // Flush lagi untuk memastikan delete tereksekusi
             entityManager.flush();
@@ -154,26 +150,26 @@ public class DocumentIndexingService {
             // Tunggu sebentar untuk memastikan delete commit
             Thread.sleep(100);
 
-            // Buat segment logs baru
-            logger.debug("Membuat {} segment logs baru untuk indexing_log_id: {}", totalSegments, indexingLogId);
-            for (int i = 1; i <= totalSegments; i++) {
-                IndexingSegmentLog segmentLog = new IndexingSegmentLog(indexingLogId, i);
-                indexingLog.getSegmentLogs().add(segmentLog);
+            // Buat page logs baru
+            logger.debug("Membuat {} page logs baru untuk indexing_log_id: {}", totalPages, indexingLogId);
+            for (int i = 1; i <= totalPages; i++) {
+                IndexingPageLog pageLog = new IndexingPageLog(indexingLogId, i);
+                indexingLog.getPageLogs().add(pageLog);
             }
 
-            // Simpan dengan segment logs baru
+            // Simpan dengan page logs baru
             indexingLogRepository.save(indexingLog);
 
-            logger.debug("Berhasil inisialisasi {} segment logs untuk indexing_log_id: {}", totalSegments, indexingLogId);
+            logger.debug("Berhasil inisialisasi {} page logs untuk indexing_log_id: {}", totalPages, indexingLogId);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error("Thread interrupted saat inisialisasi segment logs: {}", e.getMessage());
+            logger.error("Thread interrupted saat inisialisasi page logs: {}", e.getMessage());
             throw new RuntimeException("Thread interrupted", e);
         } catch (Exception e) {
-            logger.error("Error saat inisialisasi segment logs untuk indexing_log_id {}: {}",
+            logger.error("Error saat inisialisasi page logs untuk indexing_log_id {}: {}",
                         indexingLog.getId(), e.getMessage(), e);
-            throw new RuntimeException("Gagal inisialisasi segment logs", e);
+            throw new RuntimeException("Gagal inisialisasi page logs", e);
         }
     }
 
@@ -209,40 +205,54 @@ public class DocumentIndexingService {
         }
     }
 
-    private void indexDocumentSegments(List<DocumentSegmentationService.DocumentSegment> segments,
-                                     IndexingLog indexingLog) {
+    private List<PageExtractor.DocumentPage> extractPagesFromPdf(byte[] fileContent, Document document) {
+        try {
+            return pageExtractor.extractPages(
+                new java.io.ByteArrayInputStream(fileContent),
+                document.getOriginalFileName(),
+                document.getId().getValue()
+            );
+        } catch (Exception e) {
+            logger.error("Gagal mengekstrak halaman dari PDF untuk document {}: {}",
+                        document.getId().getValue(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void indexDocumentPages(List<PageExtractor.DocumentPage> pages,
+                                   IndexingLog indexingLog) {
         int successCount = 0;
         int failureCount = 0;
 
-        for (DocumentSegmentationService.DocumentSegment segment : segments) {
+        for (PageExtractor.DocumentPage page : pages) {
             try {
-                // Index segmen ke Elasticsearch menggunakan method yang benar
-                searchEngine.indexDocument(segment);
+                // Index halaman ke Elasticsearch
+                searchEngine.indexDocumentPage(page);
 
-                // Update segment log di database
-                updateSegmentLogStatus(indexingLog.getId(), segment.getSegmentNumber(), SegmentStatus.INDEXED, null);
+                // Update page log di database
+                updatePageLogStatus(indexingLog.getId(), page.getPageNumber(), PageStatus.INDEXED, null);
                 successCount++;
 
-                logger.debug("Segmen {} berhasil diindeks untuk document: {}",
-                           segment.getSegmentNumber(), segment.getDocumentId());
+                logger.debug("Halaman {} berhasil diindeks untuk document: {}",
+                           page.getPageNumber(), page.getDocumentId());
 
             } catch (Exception e) {
-                // Update segment log di database
-                updateSegmentLogStatus(indexingLog.getId(), segment.getSegmentNumber(), SegmentStatus.FAILED, e.getMessage());
+                // Update page log di database
+                updatePageLogStatus(indexingLog.getId(), page.getPageNumber(), PageStatus.FAILED, e.getMessage());
                 failureCount++;
 
-                logger.error("Gagal mengindeks segmen {} untuk document {}: {}",
-                           segment.getSegmentNumber(), segment.getDocumentId(), e.getMessage());
+                logger.error("Gagal mengindeks halaman {} untuk document {}: {}",
+                           page.getPageNumber(), page.getDocumentId(), e.getMessage());
             }
         }
 
         // Update IndexingLog dengan count yang akurat
-        indexingLog.setSegmentsIndexed(successCount);
-        indexingLog.setSegmentsFailed(failureCount);
+        indexingLog.setPagesIndexed(successCount);
+        indexingLog.setPagesFailed(failureCount);
         indexingLog.setUpdatedAt(java.time.LocalDateTime.now());
 
         // Update status berdasarkan hasil
-        if (successCount + failureCount >= indexingLog.getTotalSegments()) {
+        if (successCount + failureCount >= indexingLog.getTotalPages()) {
             if (failureCount == 0) {
                 indexingLog.setIndexingStatus(IndexingStatus.FULLY_INDEXED);
             } else if (successCount > 0) {
@@ -255,49 +265,49 @@ public class DocumentIndexingService {
         // Simpan perubahan indexing log ke database
         indexingLogRepository.save(indexingLog);
 
-        logger.info("Proses indexing segmen selesai - Berhasil: {}, Gagal: {}, Total: {}",
-                   successCount, failureCount, segments.size());
+        logger.info("Proses indexing halaman selesai - Berhasil: {}, Gagal: {}, Total: {}",
+                   successCount, failureCount, pages.size());
     }
 
-    private void updateSegmentLogStatus(Long indexingLogId, int segmentNumber, SegmentStatus status, String errorMessage) {
+    private void updatePageLogStatus(Long indexingLogId, int pageNumber, PageStatus status, String errorMessage) {
         try {
-            // Cari segment log berdasarkan indexing_log_id dan segment_number
-            Optional<IndexingSegmentLogJpaEntity> segmentLogOpt = segmentLogRepository
-                    .findByIndexingLogIdAndSegmentNumber(indexingLogId, segmentNumber);
+            // Cari page log berdasarkan indexing_log_id dan page_number
+            Optional<IndexingPageLogJpaEntity> pageLogOpt = pageLogRepository
+                .findByIndexingLogIdAndPageNumber(indexingLogId, pageNumber);
 
-            if (segmentLogOpt.isPresent()) {
-                IndexingSegmentLogJpaEntity segmentLog = segmentLogOpt.get();
+            if (pageLogOpt.isPresent()) {
+                IndexingPageLogJpaEntity pageLog = pageLogOpt.get();
 
-                // Konversi SegmentStatus ke SegmentStatusEnum
-                IndexingSegmentLogJpaEntity.SegmentStatusEnum entityStatus;
+                // Konversi PageStatus ke PageStatusEnum
+                IndexingPageLogJpaEntity.PageStatusEnum entityStatus;
                 switch (status) {
                     case INDEXED:
-                        entityStatus = IndexingSegmentLogJpaEntity.SegmentStatusEnum.INDEXED;
+                        entityStatus = IndexingPageLogJpaEntity.PageStatusEnum.INDEXED;
                         break;
                     case FAILED:
-                        entityStatus = IndexingSegmentLogJpaEntity.SegmentStatusEnum.FAILED;
+                        entityStatus = IndexingPageLogJpaEntity.PageStatusEnum.FAILED;
                         break;
                     default:
-                        entityStatus = IndexingSegmentLogJpaEntity.SegmentStatusEnum.PENDING;
+                        entityStatus = IndexingPageLogJpaEntity.PageStatusEnum.PENDING;
                         break;
                 }
 
-                segmentLog.setSegmentStatus(entityStatus);
-
-                if (status == SegmentStatus.INDEXED) {
-                    segmentLog.setIndexedAt(java.time.LocalDateTime.now());
-                } else if (status == SegmentStatus.FAILED) {
-                    segmentLog.setErrorMessage(errorMessage);
+                pageLog.setPageStatus(entityStatus);
+                pageLog.setErrorMessage(errorMessage);
+                if (status == PageStatus.INDEXED) {
+                    pageLog.setIndexedAt(LocalDateTime.now());
+                } else if (status == PageStatus.FAILED) {
+                    pageLog.setRetryCount(pageLog.getRetryCount() + 1);
                 }
 
-                segmentLogRepository.save(segmentLog);
-                logger.debug("Updated segment log untuk segment {} dengan status {}", segmentNumber, status);
+                pageLogRepository.save(pageLog);
+                logger.debug("Updated page log untuk halaman {} dengan status {}", pageNumber, status);
             } else {
-                logger.warn("Segment log tidak ditemukan untuk indexing_log_id: {} dan segment_number: {}",
-                           indexingLogId, segmentNumber);
+                logger.warn("Page log tidak ditemukan untuk indexing_log_id: {} dan page_number: {}",
+                           indexingLogId, pageNumber);
             }
         } catch (Exception e) {
-            logger.error("Gagal update segment log status untuk segment {}: {}", segmentNumber, e.getMessage());
+            logger.error("Gagal update page log status untuk halaman {}: {}", pageNumber, e.getMessage());
         }
     }
 
@@ -307,7 +317,7 @@ public class DocumentIndexingService {
                 document.markAsProcessed(generateDownloadUrl(document.getId().getValue()));
                 logger.info("Document {} berhasil diindeks sepenuhnya", document.getId().getValue());
             } else {
-                document.markAsFailed("Sebagian segmen gagal diindeks. Status: " + indexingLog.getIndexingStatus());
+                document.markAsFailed("Sebagian halaman gagal diindeks. Status: " + indexingLog.getIndexingStatus());
                 logger.warn("Document {} hanya sebagian berhasil diindeks", document.getId().getValue());
             }
 
@@ -385,9 +395,9 @@ public class DocumentIndexingService {
         return new IndexingStatusResponse(
             documentId,
             log.getIndexingStatus(),
-            log.getTotalSegments(),
-            log.getSegmentsIndexed(),
-            log.getSegmentsFailed(),
+            log.getTotalPages(),
+            log.getPagesIndexed(),
+            log.getPagesFailed(),
             log.getIndexingProgress()
         );
     }
@@ -396,28 +406,28 @@ public class DocumentIndexingService {
     public static class IndexingStatusResponse {
         private final String documentId;
         private final IndexingStatus status;
-        private final int totalSegments;
-        private final int segmentsIndexed;
-        private final int segmentsFailed;
+        private final int totalPages;
+        private final int pagesIndexed;
+        private final int pagesFailed;
         private final double progress;
 
         public IndexingStatusResponse(String documentId, IndexingStatus status,
-                                    int totalSegments, int segmentsIndexed,
-                                    int segmentsFailed, double progress) {
+                                    int totalPages, int pagesIndexed,
+                                    int pagesFailed, double progress) {
             this.documentId = documentId;
             this.status = status;
-            this.totalSegments = totalSegments;
-            this.segmentsIndexed = segmentsIndexed;
-            this.segmentsFailed = segmentsFailed;
+            this.totalPages = totalPages;
+            this.pagesIndexed = pagesIndexed;
+            this.pagesFailed = pagesFailed;
             this.progress = progress;
         }
 
         // Getters
         public String getDocumentId() { return documentId; }
         public IndexingStatus getStatus() { return status; }
-        public int getTotalSegments() { return totalSegments; }
-        public int getSegmentsIndexed() { return segmentsIndexed; }
-        public int getSegmentsFailed() { return segmentsFailed; }
+        public int getTotalPages() { return totalPages; }
+        public int getPagesIndexed() { return pagesIndexed; }
+        public int getPagesFailed() { return pagesFailed; }
         public double getProgress() { return progress; }
     }
 }

@@ -35,15 +35,16 @@ public class UploadDocumentService implements UploadDocumentUseCase {
 
     /**
      * Konstruktor untuk dependency injection
-     * @param documentRepository repository untuk operasi database dokumen
-     * @param documentStorage storage untuk menyimpan file fisik
-     * @param processingPublisher publisher untuk mengirim pesan pemrosesan
+     * 
+     * @param documentRepository    repository untuk operasi database dokumen
+     * @param documentStorage       storage untuk menyimpan file fisik
+     * @param processingPublisher   publisher untuk mengirim pesan pemrosesan
      * @param documentServiceMapper mapper untuk konversi objek
      */
     public UploadDocumentService(DocumentRepository documentRepository,
-                               DocumentStorage documentStorage,
-                               DocumentProcessingPublisher processingPublisher,
-                               DocumentServiceMapper documentServiceMapper) {
+            DocumentStorage documentStorage,
+            DocumentProcessingPublisher processingPublisher,
+            DocumentServiceMapper documentServiceMapper) {
         this.documentRepository = documentRepository;
         this.documentStorage = documentStorage;
         this.processingPublisher = processingPublisher;
@@ -52,6 +53,7 @@ public class UploadDocumentService implements UploadDocumentUseCase {
 
     /**
      * Mengunggah dokumen baru ke sistem
+     * 
      * @param command perintah unggah yang berisi data file dan metadata
      * @return hasil unggah yang berisi informasi sukses atau gagal
      */
@@ -62,28 +64,25 @@ public class UploadDocumentService implements UploadDocumentUseCase {
         DocumentId documentId = DocumentId.generate();
         // Generate nama file terenkripsi untuk penyimpanan yang aman
         String encryptedFileName = FileNameEncryptionUtil.generateEncryptedFileName(
-            command.getOriginalFileName(),
-            documentId.getValue()
-        );
+                command.getOriginalFileName(),
+                documentId.getValue());
 
         // Simpan file di object storage menggunakan nama terenkripsi
         String storagePath = documentStorage.store(
-            encryptedFileName,
-            command.getFileContent(),
-            command.getFileSize(),
-            command.getContentType()
-        );
+                encryptedFileName,
+                command.getFileContent(),
+                command.getFileSize(),
+                command.getContentType());
 
         // Buat dan simpan entitas dokumen dengan nama file terenkripsi dan asli
         Document document = new Document(
-            documentId,
-            encryptedFileName,  // Digunakan untuk identifikasi penyimpanan
-            command.getOriginalFileName(),  // Digunakan untuk unduhan
-            command.getFileSize(),
-            command.getContentType(),
-            storagePath,
-            command.getUploader()
-        );
+                documentId,
+                encryptedFileName, // Digunakan untuk identifikasi penyimpanan
+                command.getOriginalFileName(), // Digunakan untuk unduhan
+                command.getFileSize(),
+                command.getContentType(),
+                storagePath,
+                command.getUploader());
 
         documentRepository.save(document);
 
@@ -95,6 +94,7 @@ public class UploadDocumentService implements UploadDocumentUseCase {
 
     /**
      * Memvalidasi perintah unggah dokumen
+     * 
      * @param command perintah unggah yang akan divalidasi
      * @throws IllegalArgumentException jika validasi gagal
      */
@@ -118,8 +118,9 @@ public class UploadDocumentService implements UploadDocumentUseCase {
 
     /**
      * Memeriksa apakah file adalah PDF yang valid
+     * 
      * @param contentType tipe konten MIME
-     * @param fileName nama file
+     * @param fileName    nama file
      * @return true jika file adalah PDF
      */
     private boolean isPdf(String contentType, String fileName) {

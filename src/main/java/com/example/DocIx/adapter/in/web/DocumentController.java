@@ -50,13 +50,13 @@ public class DocumentController {
     private final DocumentIndexingService documentIndexingService;
 
     public DocumentController(UploadDocumentUseCase uploadDocumentUseCase,
-                            SearchDocumentUseCase searchDocumentUseCase,
-                            AutocompleteUseCase autocompleteUseCase,
-                            DocumentWebMapper documentWebMapper,
-                            DocumentRepository documentRepository,
-                            DocumentStorage documentStorage,
-                            BulkUploadService bulkUploadService,
-                            DocumentIndexingService documentIndexingService) {
+            SearchDocumentUseCase searchDocumentUseCase,
+            AutocompleteUseCase autocompleteUseCase,
+            DocumentWebMapper documentWebMapper,
+            DocumentRepository documentRepository,
+            DocumentStorage documentStorage,
+            BulkUploadService bulkUploadService,
+            DocumentIndexingService documentIndexingService) {
         this.uploadDocumentUseCase = uploadDocumentUseCase;
         this.searchDocumentUseCase = searchDocumentUseCase;
         this.autocompleteUseCase = autocompleteUseCase;
@@ -68,7 +68,8 @@ public class DocumentController {
     }
 
     /**
-     * Upload single document dengan atomic operations (Menggunakan BulkUploadService yang baru)
+     * Upload single document dengan atomic operations (Menggunakan
+     * BulkUploadService yang baru)
      */
     @PostMapping("/upload")
     public ResponseEntity<UploadResponse> uploadDocument(
@@ -80,23 +81,22 @@ public class DocumentController {
         String safeFileName = LoggingUtil.safeFileName(file.getOriginalFilename());
 
         logger.info("Memulai upload dokumen - File: {}, Size: {} bytes, Uploader: {}",
-                   safeFileName, file.getSize(), safeUploader);
+                safeFileName, file.getSize(), safeUploader);
 
         try {
             // Validasi basic file
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest()
-                    .body(new UploadResponse(false, null, "File tidak boleh kosong", null));
+                        .body(new UploadResponse(false, null, "File tidak boleh kosong", null));
             }
 
             // Gunakan BulkUploadService yang sudah robust dengan atomic operations
             BulkUploadService.BulkUploadCommand command = new BulkUploadService.BulkUploadCommand(
-                file.getOriginalFilename(),
-                file.getBytes(),
-                file.getSize(),
-                file.getContentType(),
-                uploader
-            );
+                    file.getOriginalFilename(),
+                    file.getBytes(),
+                    file.getSize(),
+                    file.getContentType(),
+                    uploader);
 
             BulkUploadService.BulkUploadResult result = bulkUploadService.uploadDocument(command);
 
@@ -104,35 +104,34 @@ public class DocumentController {
 
             if (result.isSuccess()) {
                 logger.info("Upload dokumen berhasil - DocumentId: {}, Duration: {}ms",
-                           result.getDocumentId(), duration);
+                        result.getDocumentId(), duration);
 
                 LoggingUtil.logApiAccess("POST", "/api/documents/upload", safeUploader,
-                                       duration, 200, "File: " + safeFileName);
+                        duration, 200, "File: " + safeFileName);
 
                 return ResponseEntity.ok(new UploadResponse(
-                    true,
-                    result.getDocumentId(),
-                    result.getMessage(),
-                    null
-                ));
+                        true,
+                        result.getDocumentId(),
+                        result.getMessage(),
+                        null));
             } else {
                 logger.warn("Upload dokumen gagal - File: {}, Error: {}",
-                           safeFileName, result.getErrorMessage());
+                        safeFileName, result.getErrorMessage());
 
                 return ResponseEntity.badRequest()
-                    .body(new UploadResponse(false, null, null, result.getErrorMessage()));
+                        .body(new UploadResponse(false, null, null, result.getErrorMessage()));
             }
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             logger.error("Upload dokumen gagal - File: {}, Uploader: {}, Error: {}",
-                        safeFileName, safeUploader, e.getMessage(), e);
+                    safeFileName, safeUploader, e.getMessage(), e);
 
             LoggingUtil.logApiError("POST", "/api/documents/upload", safeUploader,
-                                  duration, e.getMessage());
+                    duration, e.getMessage());
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new UploadResponse(false, null, null, "Terjadi kesalahan saat upload"));
+                    .body(new UploadResponse(false, null, null, "Terjadi kesalahan saat upload"));
         }
     }
 
@@ -148,7 +147,7 @@ public class DocumentController {
         String safeUploader = LoggingUtil.maskSensitiveData(uploader);
 
         logger.info("Memulai bulk upload dokumen - Files count: {}, Uploader: {}",
-                   files.length, safeUploader);
+                files.length, safeUploader);
 
         try {
             List<BulkUploadService.BulkUploadCommand> commands = new ArrayList<>();
@@ -157,18 +156,16 @@ public class DocumentController {
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
                     commands.add(new BulkUploadService.BulkUploadCommand(
-                        file.getOriginalFilename(),
-                        file.getBytes(),
-                        file.getSize(),
-                        file.getContentType(),
-                        uploader
-                    ));
+                            file.getOriginalFilename(),
+                            file.getBytes(),
+                            file.getSize(),
+                            file.getContentType(),
+                            uploader));
                 }
             }
 
             // Process bulk upload dengan atomic operations
-            List<BulkUploadService.BulkUploadResult> results =
-                bulkUploadService.uploadMultipleDocuments(commands);
+            List<BulkUploadService.BulkUploadResult> results = bulkUploadService.uploadMultipleDocuments(commands);
 
             // Convert results
             BulkUploadResponse response = new BulkUploadResponse();
@@ -181,24 +178,22 @@ public class DocumentController {
 
                 if (result.isSuccess()) {
                     response.addSuccess(new BulkUploadResponse.UploadResult(
-                        fileName, result.getDocumentId(), result.getMessage()
-                    ));
+                            fileName, result.getDocumentId(), result.getMessage()));
                     successCount++;
                 } else {
                     response.addError(new BulkUploadResponse.UploadError(
-                        fileName, result.getErrorMessage()
-                    ));
+                            fileName, result.getErrorMessage()));
                     errorCount++;
                 }
             }
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info("Bulk upload selesai - Success: {}, Errors: {}, Duration: {}ms",
-                       successCount, errorCount, duration);
+                    successCount, errorCount, duration);
 
             LoggingUtil.logApiAccess("POST", "/api/documents/upload/bulk", safeUploader,
-                                   duration, 200, String.format("Files: %d, Success: %d, Errors: %d",
-                                   files.length, successCount, errorCount));
+                    duration, 200, String.format("Files: %d, Success: %d, Errors: %d",
+                            files.length, successCount, errorCount));
 
             return ResponseEntity.ok(response);
 
@@ -208,8 +203,7 @@ public class DocumentController {
 
             BulkUploadResponse errorResponse = new BulkUploadResponse();
             errorResponse.addError(new BulkUploadResponse.UploadError(
-                "bulk_upload", "Terjadi kesalahan tidak terduga saat bulk upload"
-            ));
+                    "bulk_upload", "Terjadi kesalahan tidak terduga saat bulk upload"));
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
@@ -223,8 +217,8 @@ public class DocumentController {
             @PathVariable String documentId) {
 
         try {
-            DocumentIndexingService.IndexingStatusResponse status =
-                documentIndexingService.getIndexingStatus(documentId);
+            DocumentIndexingService.IndexingStatusResponse status = documentIndexingService
+                    .getIndexingStatus(documentId);
 
             return ResponseEntity.ok(status);
         } catch (Exception e) {
@@ -243,16 +237,14 @@ public class DocumentController {
             documentIndexingService.processDocumentIndexing(documentId);
 
             return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Reindex dokumen berhasil dimulai"
-            ));
+                    "status", "success",
+                    "message", "Reindex dokumen berhasil dimulai"));
         } catch (Exception e) {
             logger.error("Error saat reindex document: {}", documentId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of(
-                    "status", "error",
-                    "message", "Gagal memulai reindex dokumen: " + e.getMessage()
-                ));
+                    .body(Map.of(
+                            "status", "error",
+                            "message", "Gagal memulai reindex dokumen: " + e.getMessage()));
         }
     }
 
@@ -266,7 +258,7 @@ public class DocumentController {
         String safeQuery = LoggingUtil.maskSensitiveData(query);
 
         logger.info("Starting document search - Query: '{}', Page: {}, Size: {}",
-                   safeQuery, page, size);
+                safeQuery, page, size);
 
         try {
             SearchDocumentUseCase.SearchQuery searchQuery = new SearchDocumentUseCase.SearchQuery(query, page, size);
@@ -274,21 +266,21 @@ public class DocumentController {
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info("Document search completed - Query: '{}', Results: {}, Duration: {}ms",
-                       safeQuery, result.getTotalHits(), duration);
+                    safeQuery, result.getTotalHits(), duration);
 
             LoggingUtil.logApiAccess("GET", "/api/documents/search", "anonymous",
-                                   duration, 200, String.format("Query: '%s', Results: %d",
-                                   safeQuery, result.getTotalHits()));
+                    duration, 200, String.format("Query: '%s', Results: %d",
+                            safeQuery, result.getTotalHits()));
 
             return ResponseEntity.ok(documentWebMapper.toSearchResponse(result));
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             logger.error("Document search failed - Query: '{}', Error: {}",
-                        safeQuery, e.getMessage(), e);
+                    safeQuery, e.getMessage(), e);
 
             LoggingUtil.logApiError("GET", "/api/documents/search", "anonymous",
-                                  duration, e.getMessage());
+                    duration, e.getMessage());
             throw e;
         }
     }
@@ -302,31 +294,31 @@ public class DocumentController {
         String safeQuery = LoggingUtil.maskSensitiveData(query);
 
         logger.debug("Starting autocomplete request - Query: '{}', Max: {}",
-                    safeQuery, maxSuggestions);
+                safeQuery, maxSuggestions);
 
         try {
-            AutocompleteUseCase.AutocompleteQuery autocompleteQuery =
-                new AutocompleteUseCase.AutocompleteQuery(query, maxSuggestions);
+            AutocompleteUseCase.AutocompleteQuery autocompleteQuery = new AutocompleteUseCase.AutocompleteQuery(query,
+                    maxSuggestions);
 
             List<String> suggestions = autocompleteUseCase.getAutocompleteSuggestions(autocompleteQuery);
 
             long duration = System.currentTimeMillis() - startTime;
             logger.debug("Autocomplete completed - Query: '{}', Suggestions: {}, Duration: {}ms",
-                        safeQuery, suggestions.size(), duration);
+                    safeQuery, suggestions.size(), duration);
 
             LoggingUtil.logApiAccess("GET", "/api/documents/autocomplete", "anonymous",
-                                   duration, 200, String.format("Query: '%s', Suggestions: %d",
-                                   safeQuery, suggestions.size()));
+                    duration, 200, String.format("Query: '%s', Suggestions: %d",
+                            safeQuery, suggestions.size()));
 
             return ResponseEntity.ok(documentWebMapper.toAutocompleteResponse(suggestions));
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             logger.error("Autocomplete failed - Query: '{}', Error: {}",
-                        safeQuery, e.getMessage(), e);
+                    safeQuery, e.getMessage(), e);
 
             LoggingUtil.logApiError("GET", "/api/documents/autocomplete", "anonymous",
-                                  duration, e.getMessage());
+                    duration, e.getMessage());
             throw e;
         }
     }
@@ -347,7 +339,7 @@ public class DocumentController {
                 logger.warn("Document download failed - DocumentId: {} not found", documentId);
 
                 LoggingUtil.logApiAccess("GET", "/api/documents/download/" + documentId, "anonymous",
-                                       duration, 404, "Document not found");
+                        duration, 404, "Document not found");
                 return ResponseEntity.notFound().build();
             }
 
@@ -360,7 +352,7 @@ public class DocumentController {
                 logger.warn("Document download failed - DocumentId: {} not processed yet", documentId);
 
                 LoggingUtil.logApiAccess("GET", "/api/documents/download/" + documentId, "anonymous",
-                                       duration, 400, "Document not processed");
+                        duration, 400, "Document not processed");
                 return ResponseEntity.badRequest().build();
             }
 
@@ -370,24 +362,24 @@ public class DocumentController {
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info("Document download completed - DocumentId: {}, File: {}, Duration: {}ms",
-                       documentId, safeFileName, duration);
+                    documentId, safeFileName, duration);
 
             LoggingUtil.logApiAccess("GET", "/api/documents/download/" + documentId, "anonymous",
-                                   duration, 200, "File: " + safeFileName);
+                    duration, 200, "File: " + safeFileName);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
-                           "attachment; filename=\"" + document.getOriginalFileName() + "\"")
+                            "attachment; filename=\"" + document.getOriginalFileName() + "\"")
                     .contentType(MediaType.parseMediaType(document.getContentType()))
                     .body(resource);
 
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             logger.error("Document download failed - DocumentId: {}, Error: {}",
-                        documentId, e.getMessage(), e);
+                    documentId, e.getMessage(), e);
 
             LoggingUtil.logApiError("GET", "/api/documents/download/" + documentId, "anonymous",
-                                  duration, e.getMessage());
+                    duration, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -423,10 +415,10 @@ public class DocumentController {
                             docInfo.put("documentId", searchResult.getDocumentId().getValue());
                             docInfo.put("fileName", searchResult.getFileName());
                             docInfo.put("contentPreview", searchResult.getHighlightedContent().substring(0,
-                                Math.min(100, searchResult.getHighlightedContent().length())));
+                                    Math.min(100, searchResult.getHighlightedContent().length())));
                             docInfo.put("score", searchResult.getScore());
-                            if (searchResult.isSegmented()) {
-                                docInfo.put("segment", searchResult.getSegmentNumber() + "/" + searchResult.getTotalSegments());
+                            if (searchResult.isPaged()) {
+                                docInfo.put("page", searchResult.getPageNumber());
                             }
                             sampleDocs.add(docInfo);
                         }
@@ -482,10 +474,21 @@ public class DocumentController {
             this.error = error;
         }
 
-        public boolean isSuccess() { return success; }
-        public String getDocumentId() { return documentId; }
-        public String getMessage() { return message; }
-        public String getError() { return error; }
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public String getError() {
+            return error;
+        }
     }
 
     public static class BulkUploadResponse {
@@ -509,10 +512,21 @@ public class DocumentController {
             failed.add(new UploadError(fileName, error));
         }
 
-        public List<UploadResult> getSuccessful() { return successful; }
-        public List<UploadError> getFailed() { return failed; }
-        public int getTotalSuccessful() { return successful.size(); }
-        public int getTotalFailed() { return failed.size(); }
+        public List<UploadResult> getSuccessful() {
+            return successful;
+        }
+
+        public List<UploadError> getFailed() {
+            return failed;
+        }
+
+        public int getTotalSuccessful() {
+            return successful.size();
+        }
+
+        public int getTotalFailed() {
+            return failed.size();
+        }
 
         public static class UploadResult {
             private String fileName;
@@ -525,9 +539,17 @@ public class DocumentController {
                 this.message = message;
             }
 
-            public String getFileName() { return fileName; }
-            public String getDocumentId() { return documentId; }
-            public String getMessage() { return message; }
+            public String getFileName() {
+                return fileName;
+            }
+
+            public String getDocumentId() {
+                return documentId;
+            }
+
+            public String getMessage() {
+                return message;
+            }
         }
 
         public static class UploadError {
@@ -539,8 +561,13 @@ public class DocumentController {
                 this.error = error;
             }
 
-            public String getFileName() { return fileName; }
-            public String getError() { return error; }
+            public String getFileName() {
+                return fileName;
+            }
+
+            public String getError() {
+                return error;
+            }
         }
     }
 
@@ -552,7 +579,8 @@ public class DocumentController {
         private boolean hasNext;
         private boolean hasPrevious;
 
-        public SearchResponse(List<SearchResultDto> results, long totalHits, int page, int size, boolean hasNext, boolean hasPrevious) {
+        public SearchResponse(List<SearchResultDto> results, long totalHits, int page, int size, boolean hasNext,
+                boolean hasPrevious) {
             this.results = results;
             this.totalHits = totalHits;
             this.page = page;
@@ -561,12 +589,29 @@ public class DocumentController {
             this.hasPrevious = hasPrevious;
         }
 
-        public List<SearchResultDto> getResults() { return results; }
-        public long getTotalHits() { return totalHits; }
-        public int getPage() { return page; }
-        public int getSize() { return size; }
-        public boolean isHasNext() { return hasNext; }
-        public boolean isHasPrevious() { return hasPrevious; }
+        public List<SearchResultDto> getResults() {
+            return results;
+        }
+
+        public long getTotalHits() {
+            return totalHits;
+        }
+
+        public int getPage() {
+            return page;
+        }
+
+        public int getSize() {
+            return size;
+        }
+
+        public boolean isHasNext() {
+            return hasNext;
+        }
+
+        public boolean isHasPrevious() {
+            return hasPrevious;
+        }
     }
 
     public static class SearchResultDto {
@@ -584,11 +629,25 @@ public class DocumentController {
             this.downloadUrl = "/api/documents/download/" + documentId;
         }
 
-        public String getDocumentId() { return documentId; }
-        public String getFileName() { return fileName; }
-        public String getHighlightedContent() { return highlightedContent; }
-        public double getScore() { return score; }
-        public String getDownloadUrl() { return downloadUrl; }
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public String getHighlightedContent() {
+            return highlightedContent;
+        }
+
+        public double getScore() {
+            return score;
+        }
+
+        public String getDownloadUrl() {
+            return downloadUrl;
+        }
     }
 
     public static class AutocompleteResponse {
@@ -598,6 +657,8 @@ public class DocumentController {
             this.suggestions = suggestions;
         }
 
-        public List<String> getSuggestions() { return suggestions; }
+        public List<String> getSuggestions() {
+            return suggestions;
+        }
     }
 }

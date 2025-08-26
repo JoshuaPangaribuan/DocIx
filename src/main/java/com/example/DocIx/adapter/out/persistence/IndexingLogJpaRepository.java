@@ -19,7 +19,7 @@ public interface IndexingLogJpaRepository extends JpaRepository<IndexingLogJpaEn
     List<IndexingLogJpaEntity> findInProgressIndexing();
 
     @Query("SELECT i FROM IndexingLogJpaEntity i WHERE i.indexingStatus = 'FAILED' " +
-           "AND i.segmentsFailed < :maxRetryCount")
+           "AND i.pagesFailed < :maxRetryCount")
     List<IndexingLogJpaEntity> findFailedIndexingForRetry(@Param("maxRetryCount") int maxRetryCount);
 
     void deleteByDocumentId(String documentId);

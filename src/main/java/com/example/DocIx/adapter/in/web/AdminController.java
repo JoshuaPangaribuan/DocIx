@@ -30,10 +30,10 @@ public class AdminController {
     private final DocumentReindexingService reindexingService;
 
     public AdminController(DocumentIndexingService documentIndexingService,
-                         IndexingLogRepository indexingLogRepository,
-                         DocumentRepository documentRepository,
-                         ElasticsearchDocumentSearchAdapter searchAdapter,
-                         DocumentReindexingService reindexingService) {
+            IndexingLogRepository indexingLogRepository,
+            DocumentRepository documentRepository,
+            ElasticsearchDocumentSearchAdapter searchAdapter,
+            DocumentReindexingService reindexingService) {
         this.documentIndexingService = documentIndexingService;
         this.indexingLogRepository = indexingLogRepository;
         this.documentRepository = documentRepository;
@@ -56,12 +56,11 @@ public class AdminController {
             long failedCount = indexingLogRepository.findByStatus(IndexingStatus.FAILED).size();
 
             IndexingSummaryResponse summary = new IndexingSummaryResponse(
-                pendingCount,
-                inProgressCount,
-                fullyIndexedCount,
-                partiallyIndexedCount,
-                failedCount
-            );
+                    pendingCount,
+                    inProgressCount,
+                    fullyIndexedCount,
+                    partiallyIndexedCount,
+                    failedCount);
 
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
@@ -80,16 +79,14 @@ public class AdminController {
             documentIndexingService.retryFailedIndexing();
 
             return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Manual retry indexing berhasil dimulai"
-            ));
+                    "status", "success",
+                    "message", "Manual retry indexing berhasil dimulai"));
         } catch (Exception e) {
             logger.error("Error saat manual retry failed indexing", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of(
-                    "status", "error",
-                    "message", "Gagal memulai manual retry indexing: " + e.getMessage()
-                ));
+                    .body(Map.of(
+                            "status", "error",
+                            "message", "Gagal memulai manual retry indexing: " + e.getMessage()));
         }
     }
 
@@ -133,11 +130,12 @@ public class AdminController {
             response.indexedDocuments = indexedDocuments;
             response.missingDocuments = missingDocuments;
             response.missingDocumentIds = missingDocumentIds;
-            response.consistencyPercentage = processedDocuments.size() > 0 ?
-                (double) indexedDocuments / processedDocuments.size() * 100 : 100.0;
+            response.consistencyPercentage = processedDocuments.size() > 0
+                    ? (double) indexedDocuments / processedDocuments.size() * 100
+                    : 100.0;
 
             logger.info("Konsistensi indexing: {}/{} dokumen konsisten ({}%)",
-                       indexedDocuments, processedDocuments.size(), response.consistencyPercentage);
+                    indexedDocuments, processedDocuments.size(), response.consistencyPercentage);
 
             return ResponseEntity.ok(response);
 
@@ -158,17 +156,15 @@ public class AdminController {
             int reindexedCount = reindexingService.reindexMissingDocuments();
 
             return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Reindex dokumen yang hilang berhasil dimulai",
-                "reindexedCount", reindexedCount
-            ));
+                    "status", "success",
+                    "message", "Reindex dokumen yang hilang berhasil dimulai",
+                    "reindexedCount", reindexedCount));
         } catch (Exception e) {
             logger.error("Error saat reindex missing documents", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of(
-                    "status", "error",
-                    "message", "Gagal memulai reindex: " + e.getMessage()
-                ));
+                    .body(Map.of(
+                            "status", "error",
+                            "message", "Gagal memulai reindex: " + e.getMessage()));
         }
     }
 
@@ -182,16 +178,14 @@ public class AdminController {
             reindexingService.reindexAllDocuments();
 
             return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Reindex semua dokumen berhasil dimulai"
-            ));
+                    "status", "success",
+                    "message", "Reindex semua dokumen berhasil dimulai"));
         } catch (Exception e) {
             logger.error("Error saat reindex all documents", e);
             return ResponseEntity.internalServerError()
-                .body(Map.of(
-                    "status", "error",
-                    "message", "Gagal memulai reindex semua dokumen: " + e.getMessage()
-                ));
+                    .body(Map.of(
+                            "status", "error",
+                            "message", "Gagal memulai reindex semua dokumen: " + e.getMessage()));
         }
     }
 
@@ -205,27 +199,45 @@ public class AdminController {
         private final long totalCount;
 
         public IndexingSummaryResponse(long pendingCount, long inProgressCount,
-                                     long fullyIndexedCount, long partiallyIndexedCount,
-                                     long failedCount) {
+                long fullyIndexedCount, long partiallyIndexedCount,
+                long failedCount) {
             this.pendingCount = pendingCount;
             this.inProgressCount = inProgressCount;
             this.fullyIndexedCount = fullyIndexedCount;
             this.partiallyIndexedCount = partiallyIndexedCount;
             this.failedCount = failedCount;
             this.totalCount = pendingCount + inProgressCount + fullyIndexedCount +
-                            partiallyIndexedCount + failedCount;
+                    partiallyIndexedCount + failedCount;
         }
 
         // Getters
-        public long getPendingCount() { return pendingCount; }
-        public long getInProgressCount() { return inProgressCount; }
-        public long getFullyIndexedCount() { return fullyIndexedCount; }
-        public long getPartiallyIndexedCount() { return partiallyIndexedCount; }
-        public long getFailedCount() { return failedCount; }
-        public long getTotalCount() { return totalCount; }
+        public long getPendingCount() {
+            return pendingCount;
+        }
+
+        public long getInProgressCount() {
+            return inProgressCount;
+        }
+
+        public long getFullyIndexedCount() {
+            return fullyIndexedCount;
+        }
+
+        public long getPartiallyIndexedCount() {
+            return partiallyIndexedCount;
+        }
+
+        public long getFailedCount() {
+            return failedCount;
+        }
+
+        public long getTotalCount() {
+            return totalCount;
+        }
 
         public double getSuccessRate() {
-            if (totalCount == 0) return 0.0;
+            if (totalCount == 0)
+                return 0.0;
             return (double) fullyIndexedCount / totalCount * 100;
         }
     }
@@ -238,13 +250,28 @@ public class AdminController {
         public List<String> missingDocumentIds;
 
         // Default constructor
-        public IndexingConsistencyResponse() {}
+        public IndexingConsistencyResponse() {
+        }
 
         // Getters
-        public int getTotalProcessedDocuments() { return totalProcessedDocuments; }
-        public int getIndexedDocuments() { return indexedDocuments; }
-        public int getMissingDocuments() { return missingDocuments; }
-        public double getConsistencyPercentage() { return consistencyPercentage; }
-        public List<String> getMissingDocumentIds() { return missingDocumentIds; }
+        public int getTotalProcessedDocuments() {
+            return totalProcessedDocuments;
+        }
+
+        public int getIndexedDocuments() {
+            return indexedDocuments;
+        }
+
+        public int getMissingDocuments() {
+            return missingDocuments;
+        }
+
+        public double getConsistencyPercentage() {
+            return consistencyPercentage;
+        }
+
+        public List<String> getMissingDocumentIds() {
+            return missingDocumentIds;
+        }
     }
 }

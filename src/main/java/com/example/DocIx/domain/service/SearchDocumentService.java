@@ -48,7 +48,7 @@ public class SearchDocumentService implements SearchDocumentUseCase {
             long totalHits = 0;
 
             if (searchEngine instanceof ElasticsearchDocumentSearchAdapter elasticsearchAdapter) {
-                results = elasticsearchAdapter.searchSegments(
+                results = elasticsearchAdapter.searchPages(
                     query.getQuery(),
                     query.getPage(),
                     query.getSize()
@@ -99,7 +99,7 @@ public class SearchDocumentService implements SearchDocumentUseCase {
             // Saat ini, return count sederhana tanpa field collapsing
             // Di production, mungkin ingin menggunakan query count terpisah
             // atau implementasi search_after untuk result set besar
-            List<SearchResult> countResults = adapter.searchSegments(query, 0, 1);
+            List<SearchResult> countResults = adapter.searchPages(query, 0, 1);
             return countResults.isEmpty() ? 0 : 1000; // Estimasi sederhana
         } catch (Exception e) {
             logger.warn("Gagal mengestimasi total hits, menggunakan default: {}", e.getMessage());

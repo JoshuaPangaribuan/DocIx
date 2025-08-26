@@ -181,6 +181,9 @@ spring.servlet.multipart.max-request-size=50MB
 docix.processing.queue.name=document.processing
 docix.processing.exchange.name=document.exchange
 docix.processing.routing.key=document.process
+
+# Page-based processing (replaces segmentation)
+# Documents are now processed page by page for better search precision
 ```
 
 ## Architecture

@@ -21,7 +21,7 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 - 🐳 **Docker Ready**: Containerized dengan multi-stage build
 - 🏗️ **Hexagonal Architecture**: Clean architecture dengan ports & adapters
 - 🔄 **Type-Safe Mapping**: Object mapping dengan MapStruct untuk performance dan type safety
-- 🎯 **Smart Processing**: Otomatis memilih antara indexing biasa dan tersegmentasi berdasarkan ukuran dokumen
+- 🎯 **Page-based Processing**: Indexing dokumen PDF per halaman untuk pencarian yang lebih presisi
 
 ## 🏗️ Tech Stack
 
@@ -33,7 +33,7 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 ### Storage & Database
 - **PostgreSQL** - Primary database for metadata
 - **MinIO** - Object storage for PDF files
-- **Elasticsearch** - Search engine for full-text indexing with segmented content support
+- **Elasticsearch** - Search engine for full-text indexing with page-based content support
 
 ### Message Processing
 - **RabbitMQ** - Message broker for async processing
@@ -46,41 +46,32 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 - **Micrometer + Prometheus** - Metrics registry dan endpoint `/actuator/prometheus`
 - **OpenTelemetry (Jaeger Exporter)** - Distributed tracing
 
-## 🧩 Segmented Document Processing
+## 📄 Page-based Document Processing
 
-DocIx mengimplementasikan sistem pemrosesan dokumen tersegmentasi yang memungkinkan penanganan dokumen PDF berukuran besar secara efisien.
+DocIx mengimplementasikan sistem pemrosesan dokumen berbasis halaman yang memungkinkan penanganan dokumen PDF dengan indexing per halaman untuk pencarian yang lebih presisi.
 
 ### How It Works
 
-1. **Content Extraction**: Ekstraksi teks dari PDF menggunakan Apache Tika
-2. **Smart Segmentation**: Pembagian konten menjadi segmen dengan ukuran yang dapat dikonfigurasi
-3. **Intelligent Indexing**: 
-   - Dokumen kecil (≤ segment size): Indexing biasa
-   - Dokumen besar (> segment size): Indexing tersegmentasi
-4. **Enhanced Search**: Pencarian di seluruh segmen dengan scoring relevansi yang ditingkatkan
-
-### Configuration
-
-```properties
-# Document Segmentation Configuration
-docix.document.segment.size=${DOCIX_SEGMENT_SIZE:1024}
-```
+1. **Content Extraction**: Ekstraksi teks dari PDF menggunakan Apache PDFBox
+2. **Page-based Processing**: Setiap halaman PDF diekstrak dan diindeks secara terpisah
+3. **Precise Indexing**: Setiap halaman diindeks sebagai dokumen terpisah di Elasticsearch
+4. **Enhanced Search**: Pencarian dapat menunjukkan halaman spesifik yang mengandung hasil pencarian
 
 ### Benefits
 
-- ✅ **Better Performance**: Dokumen besar tidak membebani Elasticsearch
-- ✅ **Improved Search**: Hasil pencarian yang lebih presisi dari segmen yang relevan
-- ✅ **Memory Efficient**: Menghindari masalah memory untuk file besar
-- ✅ **Configurable**: Sesuaikan ukuran segmen berdasarkan kebutuhan
-- ✅ **Backward Compatible**: Dokumen kecil tetap menggunakan indexing efisien
-- ✅ **Smart Breaking**: Prioritas pada batas kalimat untuk keterbacaan yang lebih baik
+- ✅ **Better Precision**: Hasil pencarian menunjukkan halaman spesifik yang relevan
+- ✅ **Improved Navigation**: User dapat langsung menuju halaman yang mengandung informasi
+- ✅ **Memory Efficient**: Setiap halaman diproses secara independen
+- ✅ **Scalable**: Cocok untuk dokumen dengan berbagai ukuran
+- ✅ **Structured Results**: Hasil pencarian terstruktur berdasarkan halaman
+- ✅ **Fast Processing**: Pemrosesan paralel per halaman
 
-### Segmentation Features
+### Page Processing Features
 
-- **Sentence Boundary Detection**: Memotong di akhir kalimat bila memungkinkan
-- **Word Boundary Fallback**: Fallback ke batas kata jika tidak ada batas kalimat
-- **Configurable Size**: Ukuran segmen dapat disesuaikan via configuration
-- **Metadata Tracking**: Setiap segmen menyimpan informasi posisi dan total segmen
+- **Individual Page Extraction**: Setiap halaman diekstrak secara terpisah
+- **Page Number Tracking**: Setiap halaman menyimpan nomor halaman asli
+- **Document Metadata**: Informasi dokumen tetap terhubung dengan setiap halaman
+- **Flexible Search**: Pencarian dapat dilakukan di level dokumen atau halaman
 
 ## 🚀 Quick Start
 
