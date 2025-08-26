@@ -1,6 +1,9 @@
 package com.example.DocIx.domain.service;
 
-import com.example.DocIx.config.ShutdownHookManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.example.DocIx.domain.mapper.DocumentServiceMapper;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
@@ -9,12 +12,6 @@ import com.example.DocIx.domain.port.out.DocumentProcessingPublisher;
 import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentStorage;
 import com.example.DocIx.domain.util.FileNameEncryptionUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * Service untuk mengelola proses unggah dokumen
@@ -29,7 +26,6 @@ public class UploadDocumentService implements UploadDocumentUseCase {
     private final DocumentServiceMapper documentServiceMapper;
 
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // Batas maksimal 50MB
-    private static final String SUPPORTED_CONTENT_TYPE = "application/pdf";
 
     private static final Logger logger = LoggerFactory.getLogger(UploadDocumentService.class);
 

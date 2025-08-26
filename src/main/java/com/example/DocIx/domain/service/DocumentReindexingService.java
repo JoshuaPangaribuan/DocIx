@@ -1,5 +1,12 @@
 package com.example.DocIx.domain.service;
 
+import java.util.List;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.example.DocIx.adapter.out.search.ElasticsearchDocumentSearchAdapter;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
@@ -7,15 +14,7 @@ import com.example.DocIx.domain.port.out.ContentExtractor;
 import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentStorage;
 import com.example.DocIx.domain.port.out.PageExtractor;
-import com.example.DocIx.domain.port.out.PageExtractor.DocumentPage;
 import com.example.DocIx.domain.util.LoggingUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import java.io.InputStream;
-import java.util.List;
-import java.util.Optional;
 
 @Service
 public class DocumentReindexingService {
@@ -23,10 +22,7 @@ public class DocumentReindexingService {
     private static final Logger logger = LoggerFactory.getLogger(DocumentReindexingService.class);
 
     private final DocumentRepository documentRepository;
-    private final DocumentStorage documentStorage;
-    private final ContentExtractor contentExtractor;
     private final ElasticsearchDocumentSearchAdapter searchAdapter;
-    private final PageExtractor pageExtractor;
     private final DocumentIndexingService documentIndexingService;
 
     public DocumentReindexingService(DocumentRepository documentRepository,
@@ -36,10 +32,7 @@ public class DocumentReindexingService {
             PageExtractor pageExtractor,
             DocumentIndexingService documentIndexingService) {
         this.documentRepository = documentRepository;
-        this.documentStorage = documentStorage;
-        this.contentExtractor = contentExtractor;
         this.searchAdapter = searchAdapter;
-        this.pageExtractor = pageExtractor;
         this.documentIndexingService = documentIndexingService;
     }
 

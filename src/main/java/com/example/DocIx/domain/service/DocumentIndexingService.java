@@ -1,21 +1,33 @@
 package com.example.DocIx.domain.service;
 
-import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity;
-import com.example.DocIx.domain.model.*;
-import com.example.DocIx.domain.port.out.*;
-import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaRepository;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity;
+import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaRepository;
+import com.example.DocIx.domain.model.Document;
+import com.example.DocIx.domain.model.DocumentId;
+import com.example.DocIx.domain.model.IndexingLog;
+import com.example.DocIx.domain.model.IndexingPageLog;
+import com.example.DocIx.domain.model.IndexingStatus;
+import com.example.DocIx.domain.model.PageStatus;
+import com.example.DocIx.domain.port.out.ContentExtractor;
+import com.example.DocIx.domain.port.out.DocumentRepository;
+import com.example.DocIx.domain.port.out.DocumentSearchEngine;
+import com.example.DocIx.domain.port.out.DocumentStorage;
+import com.example.DocIx.domain.port.out.IndexingLogRepository;
+import com.example.DocIx.domain.port.out.PageExtractor;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.io.InputStream;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 
 @Service
 public class DocumentIndexingService {
@@ -24,7 +36,6 @@ public class DocumentIndexingService {
 
     private final DocumentRepository documentRepository;
     private final DocumentStorage documentStorage;
-    private final ContentExtractor contentExtractor;
     private final PageExtractor pageExtractor;
     private final DocumentSearchEngine searchEngine;
     private final IndexingLogRepository indexingLogRepository;
@@ -48,7 +59,6 @@ public class DocumentIndexingService {
         this.indexingLogRepository = indexingLogRepository;
         this.pageLogRepository = pageLogRepository;
         this.documentStorage = documentStorage;
-        this.contentExtractor = contentExtractor;
         this.pageExtractor = pageExtractor;
         this.searchEngine = searchEngine;
     }
@@ -97,7 +107,8 @@ public class DocumentIndexingService {
 
             logger.info("Document {} berhasil diekstrak menjadi {} halaman", documentId, pages.size());
 
-            // 5. Simpan IndexingLog dulu untuk mendapatkan ID, kemudian inisialisasi page logs
+            // 5. Simpan IndexingLog dulu untuk mendapatkan ID, kemudian inisialisasi page
+            // logs
             indexingLog.setTotalPages(pages.size());
             indexingLog.setIndexingStatus(IndexingStatus.IN_PROGRESS);
             indexingLog.setUpdatedAt(java.time.LocalDateTime.now());
@@ -115,7 +126,7 @@ public class DocumentIndexingService {
             updateDocumentFinalStatus(document, indexingLog);
 
             logger.info("Proses indexing selesai untuk document: {} dengan status: {}",
-                       documentId, indexingLog.getIndexingStatus());
+                    documentId, indexingLog.getIndexingStatus());
 
         } catch (Exception e) {
             logger.error("Error saat memproses indexing untuk document {}: {}", documentId, e.getMessage(), e);
@@ -168,7 +179,7 @@ public class DocumentIndexingService {
             throw new RuntimeException("Thread interrupted", e);
         } catch (Exception e) {
             logger.error("Error saat inisialisasi page logs untuk indexing_log_id {}: {}",
-                        indexingLog.getId(), e.getMessage(), e);
+                    indexingLog.getId(), e.getMessage(), e);
             throw new RuntimeException("Gagal inisialisasi page logs", e);
         }
     }
@@ -187,20 +198,7 @@ public class DocumentIndexingService {
             return inputStream.readAllBytes();
         } catch (Exception e) {
             logger.error("Gagal mengambil file dari storage untuk document {}: {}",
-                        document.getId().getValue(), e.getMessage());
-            return null;
-        }
-    }
-
-    private String extractContentFromPdf(byte[] fileContent, Document document) {
-        try {
-            return contentExtractor.extractText(
-                new java.io.ByteArrayInputStream(fileContent),
-                document.getOriginalFileName()
-            );
-        } catch (Exception e) {
-            logger.error("Gagal mengekstrak konten dari PDF untuk document {}: {}",
-                        document.getId().getValue(), e.getMessage());
+                    document.getId().getValue(), e.getMessage());
             return null;
         }
     }
@@ -208,19 +206,18 @@ public class DocumentIndexingService {
     private List<PageExtractor.DocumentPage> extractPagesFromPdf(byte[] fileContent, Document document) {
         try {
             return pageExtractor.extractPages(
-                new java.io.ByteArrayInputStream(fileContent),
-                document.getOriginalFileName(),
-                document.getId().getValue()
-            );
+                    new java.io.ByteArrayInputStream(fileContent),
+                    document.getOriginalFileName(),
+                    document.getId().getValue());
         } catch (Exception e) {
             logger.error("Gagal mengekstrak halaman dari PDF untuk document {}: {}",
-                        document.getId().getValue(), e.getMessage());
+                    document.getId().getValue(), e.getMessage());
             return null;
         }
     }
 
     private void indexDocumentPages(List<PageExtractor.DocumentPage> pages,
-                                   IndexingLog indexingLog) {
+            IndexingLog indexingLog) {
         int successCount = 0;
         int failureCount = 0;
 
@@ -234,7 +231,7 @@ public class DocumentIndexingService {
                 successCount++;
 
                 logger.debug("Halaman {} berhasil diindeks untuk document: {}",
-                           page.getPageNumber(), page.getDocumentId());
+                        page.getPageNumber(), page.getDocumentId());
 
             } catch (Exception e) {
                 // Update page log di database
@@ -242,7 +239,7 @@ public class DocumentIndexingService {
                 failureCount++;
 
                 logger.error("Gagal mengindeks halaman {} untuk document {}: {}",
-                           page.getPageNumber(), page.getDocumentId(), e.getMessage());
+                        page.getPageNumber(), page.getDocumentId(), e.getMessage());
             }
         }
 
@@ -266,14 +263,14 @@ public class DocumentIndexingService {
         indexingLogRepository.save(indexingLog);
 
         logger.info("Proses indexing halaman selesai - Berhasil: {}, Gagal: {}, Total: {}",
-                   successCount, failureCount, pages.size());
+                successCount, failureCount, pages.size());
     }
 
     private void updatePageLogStatus(Long indexingLogId, int pageNumber, PageStatus status, String errorMessage) {
         try {
             // Cari page log berdasarkan indexing_log_id dan page_number
             Optional<IndexingPageLogJpaEntity> pageLogOpt = pageLogRepository
-                .findByIndexingLogIdAndPageNumber(indexingLogId, pageNumber);
+                    .findByIndexingLogIdAndPageNumber(indexingLogId, pageNumber);
 
             if (pageLogOpt.isPresent()) {
                 IndexingPageLogJpaEntity pageLog = pageLogOpt.get();
@@ -304,7 +301,7 @@ public class DocumentIndexingService {
                 logger.debug("Updated page log untuk halaman {} dengan status {}", pageNumber, status);
             } else {
                 logger.warn("Page log tidak ditemukan untuk indexing_log_id: {} dan page_number: {}",
-                           indexingLogId, pageNumber);
+                        indexingLogId, pageNumber);
             }
         } catch (Exception e) {
             logger.error("Gagal update page log status untuk halaman {}: {}", pageNumber, e.getMessage());
@@ -324,7 +321,7 @@ public class DocumentIndexingService {
             documentRepository.save(document);
         } catch (Exception e) {
             logger.error("Gagal update final status untuk document {}: {}",
-                        document.getId().getValue(), e.getMessage());
+                    document.getId().getValue(), e.getMessage());
         }
     }
 
@@ -374,7 +371,7 @@ public class DocumentIndexingService {
                 processDocumentIndexing(failedLog.getDocumentId());
             } catch (Exception e) {
                 logger.error("Retry indexing gagal untuk document {}: {}",
-                           failedLog.getDocumentId(), e.getMessage());
+                        failedLog.getDocumentId(), e.getMessage());
             }
         }
 
@@ -393,13 +390,12 @@ public class DocumentIndexingService {
 
         IndexingLog log = logOpt.get();
         return new IndexingStatusResponse(
-            documentId,
-            log.getIndexingStatus(),
-            log.getTotalPages(),
-            log.getPagesIndexed(),
-            log.getPagesFailed(),
-            log.getIndexingProgress()
-        );
+                documentId,
+                log.getIndexingStatus(),
+                log.getTotalPages(),
+                log.getPagesIndexed(),
+                log.getPagesFailed(),
+                log.getIndexingProgress());
     }
 
     // Response class untuk status indexing
@@ -412,8 +408,8 @@ public class DocumentIndexingService {
         private final double progress;
 
         public IndexingStatusResponse(String documentId, IndexingStatus status,
-                                    int totalPages, int pagesIndexed,
-                                    int pagesFailed, double progress) {
+                int totalPages, int pagesIndexed,
+                int pagesFailed, double progress) {
             this.documentId = documentId;
             this.status = status;
             this.totalPages = totalPages;
@@ -423,11 +419,28 @@ public class DocumentIndexingService {
         }
 
         // Getters
-        public String getDocumentId() { return documentId; }
-        public IndexingStatus getStatus() { return status; }
-        public int getTotalPages() { return totalPages; }
-        public int getPagesIndexed() { return pagesIndexed; }
-        public int getPagesFailed() { return pagesFailed; }
-        public double getProgress() { return progress; }
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public IndexingStatus getStatus() {
+            return status;
+        }
+
+        public int getTotalPages() {
+            return totalPages;
+        }
+
+        public int getPagesIndexed() {
+            return pagesIndexed;
+        }
+
+        public int getPagesFailed() {
+            return pagesFailed;
+        }
+
+        public double getProgress() {
+            return progress;
+        }
     }
 }

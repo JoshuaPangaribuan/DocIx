@@ -7,13 +7,12 @@
 
 ## 📖 Overview
 
-DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi konten, dan pencarian full-text dokumen PDF dengan arsitektur Hexagonal (Ports & Adapters). Aplikasi ini dibangun menggunakan Spring Boot dan mendukung processing asynchronous dengan message queue serta **segmented indexing** untuk dokumen berukuran besar.
+DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi konten, dan pencarian full-text dokumen PDF dengan arsitektur Hexagonal (Ports & Adapters). Aplikasi ini dibangun menggunakan Spring Boot dan mendukung processing asynchronous dengan message queue serta **Page based indexing** untuk dokumen berukuran besar.
 
 ## ✨ Features
 
 - 📄 **Document Upload**: Upload dokumen PDF (single & bulk) maksimal 100MB per file
-- 🧩 **Segmented Indexing**: Pemrosesan dokumen besar dengan segmentasi konten yang dapat dikonfigurasi (default 1024 karakter)
-- 🔍 **Full-Text Search**: Pencarian konten dokumen menggunakan Elasticsearch dengan dukungan pencarian tersegmentasi
+- 🔍 **Full-Text Search**: Pencarian konten dokumen menggunakan Elasticsearch dengan dukungan pencarian berbasis halaman
 - ⚡ **Async Processing**: Pipeline pemrosesan asinkron dengan RabbitMQ
 - 💾 **Multi-Storage**: PostgreSQL untuk metadata, MinIO untuk file storage
 - 🔧 **Graceful Shutdown**: Shutdown yang aman dengan penyelesaian task aktif
