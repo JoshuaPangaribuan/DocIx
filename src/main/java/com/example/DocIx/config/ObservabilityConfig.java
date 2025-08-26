@@ -3,14 +3,21 @@ package com.example.DocIx.config;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.exporter.jaeger.JaegerGrpcSpanExporter;
+import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
+// Removed deprecated JaegerGrpcSpanExporter import
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+import io.opentelemetry.sdk.trace.export.SpanExporter;
+import io.opentelemetry.sdk.resources.Resource;
+import io.opentelemetry.semconv.ResourceAttributes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+// Removed Profile import - no longer needed without Jaeger fallback
+
+import java.time.Duration;
 
 /**
  * Konfigurasi untuk observability (metrics dan tracing)
@@ -18,8 +25,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ObservabilityConfig {
 
-    @Value("${app.tracing.jaeger.endpoint:http://localhost:14250}")
-    private String jaegerEndpoint;
+    @Value("${app.tracing.otlp.endpoint:http://localhost:4317}")
+    private String otlpEndpoint;
 
     @Value("${spring.application.name:docix}")
     private String applicationName;
@@ -33,21 +40,45 @@ public class ObservabilityConfig {
     }
 
     /**
+     * Konfigurasi Resource untuk OpenTelemetry
+     */
+    @Bean
+    public Resource otelResource() {
+        return Resource.getDefault()
+                .merge(Resource.builder()
+                        .put(ResourceAttributes.SERVICE_NAME, applicationName)
+                        .put(ResourceAttributes.SERVICE_VERSION, "1.0.0")
+                        .put(ResourceAttributes.DEPLOYMENT_ENVIRONMENT, "development")
+                        .build());
+    }
+
+    /**
+     * Konfigurasi OTLP gRPC Span Exporter (modern standard)
+     */
+    @Bean
+    public SpanExporter spanExporter() {
+        return OtlpGrpcSpanExporter.builder()
+                .setEndpoint(otlpEndpoint)
+                .setCompression("gzip")
+                .build();
+    }
+
+    /**
      * Konfigurasi OpenTelemetry untuk distributed tracing
      */
     @Bean
-    public OpenTelemetry openTelemetry() {
-        JaegerGrpcSpanExporter jaegerExporter = JaegerGrpcSpanExporter.builder()
-            .setEndpoint(jaegerEndpoint)
-            .build();
-
+    public OpenTelemetry openTelemetry(Resource otelResource, SpanExporter spanExporter) {
         SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
-            .addSpanProcessor(BatchSpanProcessor.builder(jaegerExporter).build())
-            .build();
+                .setResource(otelResource)
+                .addSpanProcessor(BatchSpanProcessor.builder(spanExporter)
+                        .setMaxExportBatchSize(512)
+                        .setScheduleDelay(Duration.ofSeconds(1))
+                        .build())
+                .build();
 
         return OpenTelemetrySdk.builder()
-            .setTracerProvider(tracerProvider)
-            .build();
+                .setTracerProvider(tracerProvider)
+                .buildAndRegisterGlobal();
     }
 
     /**

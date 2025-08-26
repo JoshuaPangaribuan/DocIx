@@ -71,11 +71,12 @@ dependencies {
 	implementation 'io.micrometer:micrometer-core'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 
-	// OpenTelemetry untuk tracing
+	// OpenTelemetry untuk tracing (using modern OTLP standard)
 	implementation platform('io.opentelemetry:opentelemetry-bom:1.32.0')
 	implementation 'io.opentelemetry:opentelemetry-api'
 	implementation 'io.opentelemetry:opentelemetry-sdk'
-	implementation 'io.opentelemetry:opentelemetry-exporter-jaeger'
+	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+	// Removed deprecated opentelemetry-exporter-jaeger
 	implementation 'io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter:1.32.0-alpha'
 
 	// Test dependencies
