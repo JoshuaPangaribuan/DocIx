@@ -1,4 +1,4 @@
-package com.example.DocIx.application.service;
+package com.example.DocIx.domain.service;
 
 import com.example.DocIx.adapter.out.search.ElasticsearchDocumentSearchAdapter;
 import com.example.DocIx.domain.model.Document;
@@ -8,7 +8,6 @@ import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentStorage;
 import com.example.DocIx.domain.port.out.PageExtractor;
 import com.example.DocIx.domain.port.out.PageExtractor.DocumentPage;
-import com.example.DocIx.domain.service.DocumentIndexingService;
 import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +45,8 @@ public class DocumentReindexingService {
 
     /**
      * Re-index dokumen yang sudah diproses tapi missing dari Elasticsearch
-     * Menggunakan DocumentIndexingService untuk memastikan konsistensi dengan indexing normal
+     * Menggunakan DocumentIndexingService untuk memastikan konsistensi dengan
+     * indexing normal
      * dan populate IndexingPageLog dengan benar
      */
     public ReindexResult reindexDocument(String documentId) {
@@ -74,16 +74,16 @@ public class DocumentReindexingService {
                 searchAdapter.deleteDocumentPages(document.getId());
                 logger.debug("Deleted existing pages from Elasticsearch for document: {}", documentId);
             } catch (Exception e) {
-                logger.warn("Failed to delete existing pages from Elasticsearch for document {}: {}", 
-                           documentId, e.getMessage());
+                logger.warn("Failed to delete existing pages from Elasticsearch for document {}: {}",
+                        documentId, e.getMessage());
             }
 
             // Gunakan DocumentIndexingService untuk memastikan konsistensi
             // dan populate IndexingPageLog dengan benar
             try {
                 documentIndexingService.processDocumentIndexing(documentId);
-                logger.info("Document re-indexed successfully using DocumentIndexingService - DocumentId: {}", 
-                           documentId);
+                logger.info("Document re-indexed successfully using DocumentIndexingService - DocumentId: {}",
+                        documentId);
                 return ReindexResult.success(documentId, "Successfully re-indexed document with page logs");
             } catch (Exception e) {
                 logger.error("Failed to re-index document using DocumentIndexingService - DocumentId: {}, Error: {}",

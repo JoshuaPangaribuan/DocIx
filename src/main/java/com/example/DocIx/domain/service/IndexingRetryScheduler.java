@@ -1,6 +1,5 @@
-package com.example.DocIx.application.service;
+package com.example.DocIx.domain.service;
 
-import com.example.DocIx.domain.service.DocumentIndexingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
