@@ -43,7 +43,7 @@ DocIx adalah web service pencarian dokumen yang memungkinkan upload, ekstraksi k
 - **Flyway** - Database migrations
 - **MapStruct** - Object mapping
 - **Micrometer + Prometheus** - Metrics registry dan endpoint `/actuator/prometheus`
-- **OpenTelemetry (Jaeger Exporter)** - Distributed tracing
+- **OpenTelemetry (OTLP Exporter)** - Distributed tracing
 
 ## 📄 Page-based Document Processing
 
@@ -453,6 +453,7 @@ spec:
 | `RABBITMQ_PORT` | RabbitMQ port | `5672` |
 | `RABBITMQ_USERNAME` | RabbitMQ username | `guest` |
 | `RABBITMQ_PASSWORD` | RabbitMQ password | `guest` |
+| `OBSERVABILITY_OTLP_ENDPOINT` | OpenTelemetry OTLP endpoint | `http://localhost:4317` |
 
 ### Application Profiles
 
@@ -494,8 +495,9 @@ Lihat [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md) untuk detail lengkap.
 - Database connection pool status
 
 ### Tracing
-- OpenTelemetry tracing diaktifkan, ekspor ke Jaeger (konfigurasi melalui starter OpenTelemetry)
-- Gunakan Jaeger UI untuk visualisasi trace
+- OpenTelemetry tracing diaktifkan dengan OTLP exporter (konfigurasi melalui starter OpenTelemetry)
+- Mendukung ekspor ke berbagai backend observability yang kompatibel dengan OTLP (Jaeger, Zipkin, dll.)
+- Konfigurasi endpoint OTLP: `observability.otlp.endpoint` (default: http://localhost:4317)
 
 ### Logging
 
