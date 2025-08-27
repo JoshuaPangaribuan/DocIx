@@ -1,5 +1,8 @@
 package com.example.DocIx.adapter.out.persistence;
 
+import com.example.DocIx.adapter.out.persistence.entity.DocumentJpaEntity;
+import com.example.DocIx.adapter.out.persistence.mapper.DocumentMapper;
+import com.example.DocIx.adapter.out.persistence.repository.DocumentJpaRepository;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.model.DocumentStatus;

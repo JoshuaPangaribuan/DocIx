@@ -11,8 +11,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity;
-import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaRepository;
+import com.example.DocIx.adapter.out.persistence.entity.IndexingLogJpaEntity;
+import com.example.DocIx.adapter.out.persistence.entity.IndexingPageLogJpaEntity;
+import com.example.DocIx.adapter.out.persistence.repository.IndexingPageLogJpaRepository;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.model.IndexingLog;
@@ -162,13 +163,12 @@ public class DocumentIndexingService implements DocumentIndexingUseCase {
             // Tunggu sebentar untuk memastikan delete commit
             Thread.sleep(100);
 
-            // Buat page logs baru langsung ke tabel anak untuk menghindari side effect orphanRemoval
+            // Buat page logs baru langsung ke tabel anak untuk menghindari side effect
+            // orphanRemoval
             logger.debug("Membuat {} page logs baru untuk indexing_log_id: {}", totalPages, indexingLogId);
-            com.example.DocIx.adapter.out.persistence.IndexingLogJpaEntity parentRef =
-                    entityManager.getReference(com.example.DocIx.adapter.out.persistence.IndexingLogJpaEntity.class, indexingLogId);
+            IndexingLogJpaEntity parentRef = entityManager.getReference(IndexingLogJpaEntity.class, indexingLogId);
             for (int i = 1; i <= totalPages; i++) {
-                com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity pageEntity =
-                        new com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity(parentRef, i);
+                IndexingPageLogJpaEntity pageEntity = new IndexingPageLogJpaEntity(parentRef, i);
                 pageLogRepository.save(pageEntity);
             }
 

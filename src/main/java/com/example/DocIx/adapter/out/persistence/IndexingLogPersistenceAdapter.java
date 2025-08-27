@@ -1,5 +1,8 @@
 package com.example.DocIx.adapter.out.persistence;
 
+import com.example.DocIx.adapter.out.persistence.entity.IndexingLogJpaEntity;
+import com.example.DocIx.adapter.out.persistence.mapper.IndexingLogMapper;
+import com.example.DocIx.adapter.out.persistence.repository.IndexingLogJpaRepository;
 import com.example.DocIx.domain.model.IndexingLog;
 import com.example.DocIx.domain.model.IndexingStatus;
 import com.example.DocIx.domain.port.out.IndexingLogRepository;
@@ -27,13 +30,13 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
     public IndexingLog save(IndexingLog indexingLog) {
         IndexingLogJpaEntity entity = mapper.toJpaEntity(indexingLog);
         IndexingLogJpaEntity savedEntity = jpaRepository.save(entity);
-        return mapper.toDomainModel(savedEntity);
+        return mapper.toDomainEntity(savedEntity);
     }
 
     @Override
     public Optional<IndexingLog> findByDocumentId(String documentId) {
         return jpaRepository.findByDocumentId(documentId)
-                .map(mapper::toDomainModel);
+                .map(mapper::toDomainEntity);
     }
 
     @Override
@@ -41,7 +44,7 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
         IndexingLogJpaEntity.IndexingStatusEnum jpaStatus = mapper.mapIndexingStatusToJpa(status);
         return jpaRepository.findByIndexingStatus(jpaStatus)
                 .stream()
-                .map(mapper::toDomainModel)
+                .map(mapper::toDomainEntity)
                 .collect(Collectors.toList());
     }
 
@@ -49,7 +52,7 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
     public List<IndexingLog> findInProgressIndexing() {
         return jpaRepository.findInProgressIndexing()
                 .stream()
-                .map(mapper::toDomainModel)
+                .map(mapper::toDomainEntity)
                 .collect(Collectors.toList());
     }
 
@@ -57,7 +60,7 @@ public class IndexingLogPersistenceAdapter implements IndexingLogRepository {
     public List<IndexingLog> findFailedIndexingForRetry(int maxRetryCount) {
         return jpaRepository.findFailedIndexingForRetry(maxRetryCount)
                 .stream()
-                .map(mapper::toDomainModel)
+                .map(mapper::toDomainEntity)
                 .collect(Collectors.toList());
     }
 

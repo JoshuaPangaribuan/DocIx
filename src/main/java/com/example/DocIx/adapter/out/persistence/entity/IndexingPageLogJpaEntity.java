@@ -1,4 +1,4 @@
-package com.example.DocIx.adapter.out.persistence;
+package com.example.DocIx.adapter.out.persistence.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

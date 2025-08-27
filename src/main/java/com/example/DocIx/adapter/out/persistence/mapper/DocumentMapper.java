@@ -1,33 +1,38 @@
-package com.example.DocIx.adapter.out.persistence;
+package com.example.DocIx.adapter.out.persistence.mapper;
 
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Named;
+
+import com.example.DocIx.adapter.out.persistence.entity.DocumentJpaEntity;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
-import org.springframework.stereotype.Component;
 
-@Component
-public class DocumentMapper {
+@Mapper(componentModel = "spring")
+public interface DocumentMapper {
 
-    public DocumentJpaEntity toJpaEntity(Document document) {
-        return new DocumentJpaEntity(
-                document.getId().getValue(),
-                document.getFileName(),
-                document.getOriginalFileName(),
-                document.getFileSize(),
-                document.getContentType(),
-                document.getStoragePath(),
-                document.getUploader(),
-                document.getUploadedAt(),
-                document.getDownloadUrl(),
-                document.getStatus(),
-                document.getErrorMessage(),
-                document.getLastProcessedAt());
+    @Mapping(source = "id", target = "id", qualifiedByName = "documentIdToString")
+    DocumentJpaEntity toJpaEntity(Document document);
+
+    @Named("documentIdToString")
+    default String documentIdToString(DocumentId documentId) {
+        return documentId != null ? documentId.getValue() : null;
     }
 
-    public Document toDomainEntity(DocumentJpaEntity jpaEntity) {
-        return createDocumentWithAllFields(jpaEntity);
+    @Mapping(source = "id", target = "id", qualifiedByName = "stringToDocumentId")
+    @Mapping(target = ".", source = ".", qualifiedByName = "mapDocumentWithStatus")
+    Document toDomainEntity(DocumentJpaEntity jpaEntity);
+
+    @Named("stringToDocumentId")
+    default DocumentId stringToDocumentId(String id) {
+        return id != null ? DocumentId.of(id) : null;
     }
 
-    private Document createDocumentWithAllFields(DocumentJpaEntity jpaEntity) {
+    @Named("mapDocumentWithStatus")
+    default Document mapDocumentWithStatus(DocumentJpaEntity jpaEntity) {
+        if (jpaEntity == null)
+            return null;
+
         // Create document with basic constructor
         Document document = new Document(
                 DocumentId.of(jpaEntity.getId()),

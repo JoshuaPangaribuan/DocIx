@@ -1,4 +1,4 @@
-package com.example.DocIx.adapter.out.persistence;
+package com.example.DocIx.adapter.out.persistence.entity;
 
 import com.example.DocIx.domain.model.DocumentStatus;
 import jakarta.persistence.*;

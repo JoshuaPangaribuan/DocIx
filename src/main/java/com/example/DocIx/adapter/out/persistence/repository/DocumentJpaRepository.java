@@ -1,5 +1,6 @@
-package com.example.DocIx.adapter.out.persistence;
+package com.example.DocIx.adapter.out.persistence.repository;
 
+import com.example.DocIx.adapter.out.persistence.entity.DocumentJpaEntity;
 import com.example.DocIx.domain.model.DocumentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
