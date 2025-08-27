@@ -1,13 +1,13 @@
 package com.example.DocIx.adapter.in.messaging;
 
 import com.example.DocIx.adapter.out.messaging.RabbitMQDocumentProcessingPublisher.DocumentProcessingMessage;
-import com.example.DocIx.config.GracefulShutdownManager;
 import com.example.DocIx.domain.service.DocumentIndexingService;
 import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
+import com.rabbitmq.client.Channel;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
@@ -19,27 +19,19 @@ public class DocumentProcessingMessageHandler {
     private static final Logger logger = LoggerFactory.getLogger(DocumentProcessingMessageHandler.class);
 
     private final DocumentIndexingService documentIndexingService;
-    private final GracefulShutdownManager shutdownManager;
 
     // Track active processing tasks for graceful shutdown
     private final AtomicInteger activeProcessingTasks = new AtomicInteger(0);
 
-    public DocumentProcessingMessageHandler(DocumentIndexingService documentIndexingService,
-                                          GracefulShutdownManager shutdownManager) {
+    public DocumentProcessingMessageHandler(DocumentIndexingService documentIndexingService) {
         this.documentIndexingService = documentIndexingService;
-        this.shutdownManager = shutdownManager;
     }
 
     @RabbitListener(queues = "${docix.processing.queue.name}")
     public void handleDocumentProcessing(DocumentProcessingMessage message,
-                                       @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+                                       @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+                                       Channel channel) {
         String documentId = message.getDocumentId();
-
-        // Check if shutdown is in progress
-        if (shutdownManager.isShuttingDown()) {
-            logger.warn("Sistem sedang shutdown, menolak pemrosesan dokumen: {}", documentId);
-            return;
-        }
 
         activeProcessingTasks.incrementAndGet();
 
@@ -52,10 +44,18 @@ public class DocumentProcessingMessageHandler {
 
             LoggingUtil.logPerformance("document_processing_complete", documentId);
             logger.info("Pemrosesan dokumen selesai: {}", documentId);
+            // manual ack on success
+            channel.basicAck(deliveryTag, false);
 
         } catch (Exception e) {
             logger.error("Error saat memproses dokumen {}: {}", documentId, e.getMessage(), e);
             LoggingUtil.logError("document_processing_error", documentId, e);
+            // nack and requeue for retry
+            try {
+                channel.basicNack(deliveryTag, false, true);
+            } catch (Exception nackEx) {
+                logger.error("Gagal melakukan NACK untuk deliveryTag {}: {}", deliveryTag, nackEx.getMessage(), nackEx);
+            }
         } finally {
             activeProcessingTasks.decrementAndGet();
         }

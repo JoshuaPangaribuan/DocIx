@@ -17,6 +17,8 @@ public interface DocumentWebMapper {
 
     // Upload mappings
     @Mapping(target = "documentId", source = "documentId.value")
+    @Mapping(target = "success", constant = "true")
+    @Mapping(target = "error", ignore = true)
     UploadResponse toUploadResponse(UploadDocumentUseCase.UploadResult result);
 
     // Helper methods for bulk upload - return correct nested class types

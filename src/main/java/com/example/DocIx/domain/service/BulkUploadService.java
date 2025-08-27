@@ -1,6 +1,7 @@
 package com.example.DocIx.domain.service;
 
 import com.example.DocIx.domain.event.DocumentUploadEventListener;
+import com.example.DocIx.domain.port.in.BulkUploadUseCase;
 import com.example.DocIx.domain.model.*;
 import com.example.DocIx.domain.port.out.*;
 import com.example.DocIx.domain.util.FileNameEncryptionUtil;
@@ -14,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-public class BulkUploadService {
+public class BulkUploadService implements BulkUploadUseCase {
 
     private static final Logger logger = LoggerFactory.getLogger(BulkUploadService.class);
 
@@ -40,8 +41,8 @@ public class BulkUploadService {
      * Upload dokumen dengan mekanisme transactional/atomic
      * Jika salah satu proses gagal, seluruh operasi akan dibatalkan (rollback)
      */
-    @Transactional
-    public BulkUploadResult uploadDocument(BulkUploadCommand command) {
+    private BulkUploadResult uploadDocumentInternal(BulkUploadCommand command) {
+        String storagePathForCleanup = null;
         try {
             logger.info("Memulai proses upload dokumen: {}", command.getOriginalFileName());
 
@@ -73,6 +74,7 @@ public class BulkUploadService {
                     command.getContentType()
                 );
                 logger.debug("File berhasil disimpan ke MinIO: {}", storagePath);
+                storagePathForCleanup = storagePath;
             } catch (Exception e) {
                 logger.error("Gagal menyimpan file ke MinIO: {}", e.getMessage());
                 throw new BulkUploadException("Gagal menyimpan file ke storage", e);
@@ -110,9 +112,9 @@ public class BulkUploadService {
                 indexingLogRepository.save(indexingLog);
                 logger.debug("Indexing log berhasil dibuat untuk document: {}", documentId.getValue());
             } catch (Exception e) {
-                logger.error("Gagal membuat indexing log: {}", e.getMessage());
-                // Jangan rollback jika indexing log gagal, tapi log error
-                logger.warn("Indexing log gagal dibuat, tapi upload tetap berhasil");
+                logger.error("Gagal membuat indexing log: {}", e.getMessage(), e);
+                // Pastikan langkah 1-3 transactional: gagalkan operasi agar rollback DB & hapus file di MinIO
+                throw new BulkUploadException("Gagal membuat indexing log", e);
             }
 
             // 7. Publish event untuk async processing (setelah commit dengan TransactionalEventListener)
@@ -126,9 +128,26 @@ public class BulkUploadService {
 
         } catch (BulkUploadException e) {
             logger.error("Bulk upload gagal: {}", e.getMessage());
+            // Upaya cleanup file dari MinIO jika sudah terlanjur diupload
+            if (storagePathForCleanup != null) {
+                try {
+                    documentStorage.delete(storagePathForCleanup);
+                    logger.debug("Cleanup file MinIO berhasil: {}", storagePathForCleanup);
+                } catch (Exception cleanupEx) {
+                    logger.warn("Gagal cleanup file MinIO saat rollback: {}", cleanupEx.getMessage());
+                }
+            }
             throw e;
         } catch (Exception e) {
             logger.error("Unexpected error saat bulk upload: {}", e.getMessage(), e);
+            if (storagePathForCleanup != null) {
+                try {
+                    documentStorage.delete(storagePathForCleanup);
+                    logger.debug("Cleanup file MinIO berhasil: {}", storagePathForCleanup);
+                } catch (Exception cleanupEx) {
+                    logger.warn("Gagal cleanup file MinIO saat rollback: {}", cleanupEx.getMessage());
+                }
+            }
             throw new BulkUploadException("Terjadi kesalahan tidak terduga saat upload", e);
         }
     }
@@ -136,10 +155,39 @@ public class BulkUploadService {
     /**
      * Bulk upload multiple documents dengan atomic operations
      */
-    @Transactional
-    public List<BulkUploadResult> uploadMultipleDocuments(List<BulkUploadCommand> commands) {
+    private List<BulkUploadResult> uploadMultipleDocumentsInternal(List<BulkUploadCommand> commands) {
         return commands.stream()
-                .map(this::uploadDocument)
+                .map(this::uploadDocumentInternal)
+                .toList();
+    }
+
+    // Implement BulkUploadUseCase by adapting to internal command/result types
+    @Override
+    @Transactional
+    public com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadResult uploadDocument(
+            com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadCommand command) {
+        BulkUploadCommand internal = new BulkUploadCommand(
+                command.getOriginalFileName(),
+                command.getFileContent(),
+                command.getFileSize(),
+                command.getContentType(),
+                command.getUploader());
+        BulkUploadResult result = uploadDocumentInternal(internal);
+        return new com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadResult(
+                result.isSuccess(), result.getDocumentId(), result.getMessage(), result.getErrorMessage());
+    }
+
+    @Override
+    @Transactional
+    public List<com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadResult> uploadMultipleDocuments(
+            List<com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadCommand> commands) {
+        List<BulkUploadCommand> internal = commands.stream()
+                .map(c -> new BulkUploadCommand(c.getOriginalFileName(), c.getFileContent(), c.getFileSize(),
+                        c.getContentType(), c.getUploader()))
+                .toList();
+        return uploadMultipleDocumentsInternal(internal).stream()
+                .map(r -> new com.example.DocIx.domain.port.in.BulkUploadUseCase.BulkUploadResult(
+                        r.isSuccess(), r.getDocumentId(), r.getMessage(), r.getErrorMessage()))
                 .toList();
     }
 

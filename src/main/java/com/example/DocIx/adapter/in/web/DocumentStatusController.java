@@ -1,8 +1,7 @@
 package com.example.DocIx.adapter.in.web;
 
-import com.example.DocIx.domain.model.Document;
-import com.example.DocIx.domain.model.DocumentId;
-import com.example.DocIx.domain.port.out.DocumentRepository;
+import com.example.DocIx.domain.port.in.DocumentStatusQueryUseCase;
+import com.example.DocIx.adapter.in.web.mapper.DocumentStatusWebMapper;
 import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,10 +16,13 @@ import java.util.Optional;
 public class DocumentStatusController {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentStatusController.class);
-    private final DocumentRepository documentRepository;
+    private final DocumentStatusQueryUseCase documentStatusQueryUseCase;
+    private final DocumentStatusWebMapper documentStatusWebMapper;
 
-    public DocumentStatusController(DocumentRepository documentRepository) {
-        this.documentRepository = documentRepository;
+    public DocumentStatusController(DocumentStatusQueryUseCase documentStatusQueryUseCase,
+                                    DocumentStatusWebMapper documentStatusWebMapper) {
+        this.documentStatusQueryUseCase = documentStatusQueryUseCase;
+        this.documentStatusWebMapper = documentStatusWebMapper;
     }
 
     @GetMapping("/{documentId}/status")
@@ -30,9 +32,8 @@ public class DocumentStatusController {
         logger.info("Starting document status check - DocumentId: {}", documentId);
 
         try {
-            Optional<Document> documentOpt = documentRepository.findById(DocumentId.of(documentId));
-
-            if (documentOpt.isEmpty()) {
+            Optional<DocumentStatusQueryUseCase.DocumentStatusResponse> statusOpt = documentStatusQueryUseCase.getDocumentStatus(documentId);
+            if (statusOpt.isEmpty()) {
                 long duration = System.currentTimeMillis() - startTime;
                 logger.warn("Document status check failed - DocumentId: {} not found", documentId);
 
@@ -41,24 +42,16 @@ public class DocumentStatusController {
                 return ResponseEntity.notFound().build();
             }
 
-            Document document = documentOpt.get();
-            DocumentStatusResponse response = new DocumentStatusResponse(
-                document.getId().getValue(),
-                document.getOriginalFileName(),
-                document.getStatus().name(),
-                document.getUploadedAt().toString(),
-                document.getLastProcessedAt() != null ? document.getLastProcessedAt().toString() : null,
-                document.getErrorMessage()
-            );
+            DocumentStatusResponse response = documentStatusWebMapper.toWeb(statusOpt.get());
 
             long duration = System.currentTimeMillis() - startTime;
-            String safeFileName = LoggingUtil.safeFileName(document.getOriginalFileName());
+            String safeFileName = LoggingUtil.safeFileName(response.getOriginalFileName());
 
             logger.info("Document status check completed - DocumentId: {}, Status: {}, File: {}, Duration: {}ms",
-                       documentId, document.getStatus().name(), safeFileName, duration);
+                       documentId, response.getStatus(), safeFileName, duration);
 
             LoggingUtil.logApiAccess("GET", "/api/documents/" + documentId + "/status", "anonymous",
-                                   duration, 200, "Status: " + document.getStatus().name());
+                                   duration, 200, "Status: " + response.getStatus());
 
             return ResponseEntity.ok(response);
 
@@ -80,19 +73,9 @@ public class DocumentStatusController {
         logger.info("Starting documents by status query - Status: {}", status);
 
         try {
-            List<Document> documents = documentRepository.findByStatus(
-                com.example.DocIx.domain.model.DocumentStatus.valueOf(status.toUpperCase())
-            );
-
-            List<DocumentStatusResponse> responses = documents.stream()
-                .map(doc -> new DocumentStatusResponse(
-                    doc.getId().getValue(),
-                    doc.getOriginalFileName(),
-                    doc.getStatus().name(),
-                    doc.getUploadedAt().toString(),
-                    doc.getLastProcessedAt() != null ? doc.getLastProcessedAt().toString() : null,
-                    doc.getErrorMessage()
-                ))
+            List<DocumentStatusQueryUseCase.DocumentStatusResponse> list = documentStatusQueryUseCase.getDocumentsByStatus(status);
+            List<DocumentStatusResponse> responses = list.stream()
+                .map(documentStatusWebMapper::toWeb)
                 .toList();
 
             long duration = System.currentTimeMillis() - startTime;

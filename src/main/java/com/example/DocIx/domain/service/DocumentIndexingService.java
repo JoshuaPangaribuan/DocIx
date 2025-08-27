@@ -16,9 +16,9 @@ import com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaRepository;
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.model.IndexingLog;
-import com.example.DocIx.domain.model.IndexingPageLog;
 import com.example.DocIx.domain.model.IndexingStatus;
 import com.example.DocIx.domain.model.PageStatus;
+import com.example.DocIx.domain.port.in.DocumentIndexingUseCase;
 import com.example.DocIx.domain.port.out.ContentExtractor;
 import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
@@ -30,7 +30,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
 @Service
-public class DocumentIndexingService {
+public class DocumentIndexingService implements DocumentIndexingUseCase {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentIndexingService.class);
 
@@ -98,7 +98,7 @@ public class DocumentIndexingService {
                 return;
             }
 
-            // 4. Ekstrak konten PDF per halaman
+            // 4. Ekstrak konten PDF per halaman (gunakan Tika-based PageExtractor)
             List<PageExtractor.DocumentPage> pages = extractPagesFromPdf(fileContent, document);
             if (pages == null || pages.isEmpty()) {
                 handleIndexingFailure(indexingLog, document, "Gagal mengekstrak halaman dari PDF atau file kosong");
@@ -136,6 +136,8 @@ public class DocumentIndexingService {
 
     private void initializePageLogs(IndexingLog indexingLog, int totalPages) {
         try {
+            // Pastikan parent tersimpan dan memiliki ID
+            indexingLog = indexingLogRepository.save(indexingLog);
             Long indexingLogId = indexingLog.getId();
 
             // Strategi yang lebih aman: hapus page logs lama dengan native query
@@ -146,8 +148,7 @@ public class DocumentIndexingService {
                 indexingLog.getPageLogs().clear();
             }
 
-            // Simpan IndexingLog tanpa page logs terlebih dahulu
-            indexingLog = indexingLogRepository.save(indexingLog);
+            // Simpan IndexingLog tanpa page logs terlebih dahulu (sudah disimpan di atas)
 
             // Flush menggunakan EntityManager
             entityManager.flush();
@@ -161,15 +162,15 @@ public class DocumentIndexingService {
             // Tunggu sebentar untuk memastikan delete commit
             Thread.sleep(100);
 
-            // Buat page logs baru
+            // Buat page logs baru langsung ke tabel anak untuk menghindari side effect orphanRemoval
             logger.debug("Membuat {} page logs baru untuk indexing_log_id: {}", totalPages, indexingLogId);
+            com.example.DocIx.adapter.out.persistence.IndexingLogJpaEntity parentRef =
+                    entityManager.getReference(com.example.DocIx.adapter.out.persistence.IndexingLogJpaEntity.class, indexingLogId);
             for (int i = 1; i <= totalPages; i++) {
-                IndexingPageLog pageLog = new IndexingPageLog(indexingLogId, i);
-                indexingLog.getPageLogs().add(pageLog);
+                com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity pageEntity =
+                        new com.example.DocIx.adapter.out.persistence.IndexingPageLogJpaEntity(parentRef, i);
+                pageLogRepository.save(pageEntity);
             }
-
-            // Simpan dengan page logs baru
-            indexingLogRepository.save(indexingLog);
 
             logger.debug("Berhasil inisialisasi {} page logs untuk indexing_log_id: {}", totalPages, indexingLogId);
 
@@ -270,7 +271,7 @@ public class DocumentIndexingService {
         try {
             // Cari page log berdasarkan indexing_log_id dan page_number
             Optional<IndexingPageLogJpaEntity> pageLogOpt = pageLogRepository
-                    .findByIndexingLogIdAndPageNumber(indexingLogId, pageNumber);
+                    .findByIndexingLog_IdAndPageNumber(indexingLogId, pageNumber);
 
             if (pageLogOpt.isPresent()) {
                 IndexingPageLogJpaEntity pageLog = pageLogOpt.get();
@@ -381,15 +382,15 @@ public class DocumentIndexingService {
     /**
      * Mendapatkan status indexing untuk document
      */
-    public IndexingStatusResponse getIndexingStatus(String documentId) {
+    public DocumentIndexingUseCase.IndexingStatusResponse getIndexingStatus(String documentId) {
         Optional<IndexingLog> logOpt = indexingLogRepository.findByDocumentId(documentId);
 
         if (logOpt.isEmpty()) {
-            return new IndexingStatusResponse(documentId, IndexingStatus.PENDING, 0, 0, 0, 0.0);
+            return new DocumentIndexingUseCase.IndexingStatusResponse(documentId, IndexingStatus.PENDING, 0, 0, 0, 0.0);
         }
 
         IndexingLog log = logOpt.get();
-        return new IndexingStatusResponse(
+        return new DocumentIndexingUseCase.IndexingStatusResponse(
                 documentId,
                 log.getIndexingStatus(),
                 log.getTotalPages(),
@@ -398,49 +399,4 @@ public class DocumentIndexingService {
                 log.getIndexingProgress());
     }
 
-    // Response class untuk status indexing
-    public static class IndexingStatusResponse {
-        private final String documentId;
-        private final IndexingStatus status;
-        private final int totalPages;
-        private final int pagesIndexed;
-        private final int pagesFailed;
-        private final double progress;
-
-        public IndexingStatusResponse(String documentId, IndexingStatus status,
-                int totalPages, int pagesIndexed,
-                int pagesFailed, double progress) {
-            this.documentId = documentId;
-            this.status = status;
-            this.totalPages = totalPages;
-            this.pagesIndexed = pagesIndexed;
-            this.pagesFailed = pagesFailed;
-            this.progress = progress;
-        }
-
-        // Getters
-        public String getDocumentId() {
-            return documentId;
-        }
-
-        public IndexingStatus getStatus() {
-            return status;
-        }
-
-        public int getTotalPages() {
-            return totalPages;
-        }
-
-        public int getPagesIndexed() {
-            return pagesIndexed;
-        }
-
-        public int getPagesFailed() {
-            return pagesFailed;
-        }
-
-        public double getProgress() {
-            return progress;
-        }
-    }
 }

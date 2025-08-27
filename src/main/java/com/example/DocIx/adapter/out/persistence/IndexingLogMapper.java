@@ -26,8 +26,8 @@ public class IndexingLogMapper {
         // Map page logs dengan relasi yang benar menggunakan helper method
         if (indexingLog.getPageLogs() != null) {
             for (IndexingPageLog pageLog : indexingLog.getPageLogs()) {
-                IndexingPageLogJpaEntity pageEntity = toPageJpaEntity(pageLog, null);
-                entity.addPageLog(pageEntity); // Menggunakan helper method
+                IndexingPageLogJpaEntity pageEntity = toPageJpaEntity(pageLog, entity);
+                entity.addPageLog(pageEntity); // set relasi parent
             }
         }
 
@@ -66,7 +66,7 @@ public class IndexingLogMapper {
 
         IndexingPageLogJpaEntity entity = new IndexingPageLogJpaEntity();
         entity.setId(pageLog.getId());
-        entity.setIndexingLog(parentEntity); // Set relasi parent
+        entity.setIndexingLog(parentEntity); // Set relasi parent agar FK terisi
         entity.setPageNumber(pageLog.getPageNumber());
         entity.setPageStatus(mapPageStatus(pageLog.getPageStatus()));
         entity.setIndexedAt(pageLog.getIndexedAt());

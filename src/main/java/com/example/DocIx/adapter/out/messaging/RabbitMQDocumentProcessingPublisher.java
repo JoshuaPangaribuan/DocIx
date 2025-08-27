@@ -2,6 +2,8 @@ package com.example.DocIx.adapter.out.messaging;
 
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentProcessingPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,6 +14,7 @@ public class RabbitMQDocumentProcessingPublisher implements DocumentProcessingPu
     private final RabbitTemplate rabbitTemplate;
     private final String exchangeName;
     private final String routingKey;
+    private static final Logger logger = LoggerFactory.getLogger(RabbitMQDocumentProcessingPublisher.class);
 
     public RabbitMQDocumentProcessingPublisher(RabbitTemplate rabbitTemplate,
                                              @Value("${docix.processing.exchange.name}") String exchangeName,
@@ -26,6 +29,8 @@ public class RabbitMQDocumentProcessingPublisher implements DocumentProcessingPu
         try {
             DocumentProcessingMessage message = new DocumentProcessingMessage(documentId.getValue());
             rabbitTemplate.convertAndSend(exchangeName, routingKey, message);
+            logger.info("Published document processing message - documentId: {} to exchange: {}, routingKey: {}",
+                    documentId.getValue(), exchangeName, routingKey);
         } catch (Exception e) {
             throw new MessagingException("Failed to publish document for processing: " + documentId, e);
         }

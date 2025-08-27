@@ -16,12 +16,12 @@ public interface IndexingPageLogJpaRepository extends JpaRepository<IndexingPage
     /**
      * Mencari page log berdasarkan indexing log ID dan nomor halaman
      */
-    Optional<IndexingPageLogJpaEntity> findByIndexingLogIdAndPageNumber(Long indexingLogId, int pageNumber);
+    Optional<IndexingPageLogJpaEntity> findByIndexingLog_IdAndPageNumber(Long indexingLogId, int pageNumber);
 
     /**
      * Mencari semua page logs berdasarkan indexing log ID
      */
-    List<IndexingPageLogJpaEntity> findByIndexingLogId(Long indexingLogId);
+    List<IndexingPageLogJpaEntity> findByIndexingLog_Id(Long indexingLogId);
 
     /**
      * Mencari page logs berdasarkan status
@@ -60,7 +60,7 @@ public interface IndexingPageLogJpaRepository extends JpaRepository<IndexingPage
     /**
      * Mengecek apakah ada page logs untuk indexing log tertentu
      */
-    boolean existsByIndexingLogId(Long indexingLogId);
+    boolean existsByIndexingLog_Id(Long indexingLogId);
 
     /**
      * Mencari page logs yang sedang dalam proses (IN_PROGRESS)

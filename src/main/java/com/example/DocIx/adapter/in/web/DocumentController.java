@@ -1,17 +1,12 @@
 package com.example.DocIx.adapter.in.web;
 
 import com.example.DocIx.adapter.in.web.mapper.DocumentWebMapper;
-import com.example.DocIx.adapter.out.search.ElasticsearchDocumentSearchAdapter;
-import com.example.DocIx.domain.model.Document;
-import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.in.UploadDocumentUseCase;
 import com.example.DocIx.domain.port.in.SearchDocumentUseCase;
 import com.example.DocIx.domain.port.in.AutocompleteUseCase;
-import com.example.DocIx.domain.port.out.DocumentRepository;
-import com.example.DocIx.domain.port.out.DocumentStorage;
-import com.example.DocIx.domain.service.BulkUploadService;
-import com.example.DocIx.domain.service.DocumentIndexingService;
-import com.example.DocIx.domain.service.SearchDocumentService;
+import com.example.DocIx.domain.port.in.BulkUploadUseCase;
+import com.example.DocIx.domain.port.in.DocumentIndexingUseCase;
+import com.example.DocIx.domain.port.in.DownloadDocumentUseCase;
 import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,12 +21,9 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -40,31 +32,26 @@ public class DocumentController {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentController.class);
 
-    private final UploadDocumentUseCase uploadDocumentUseCase;
     private final SearchDocumentUseCase searchDocumentUseCase;
     private final AutocompleteUseCase autocompleteUseCase;
     private final DocumentWebMapper documentWebMapper;
-    private final DocumentRepository documentRepository;
-    private final DocumentStorage documentStorage;
-    private final BulkUploadService bulkUploadService;
-    private final DocumentIndexingService documentIndexingService;
+    private final BulkUploadUseCase bulkUploadUseCase;
+    private final DocumentIndexingUseCase documentIndexingUseCase;
+    private final DownloadDocumentUseCase downloadDocumentUseCase;
 
     public DocumentController(UploadDocumentUseCase uploadDocumentUseCase,
             SearchDocumentUseCase searchDocumentUseCase,
             AutocompleteUseCase autocompleteUseCase,
             DocumentWebMapper documentWebMapper,
-            DocumentRepository documentRepository,
-            DocumentStorage documentStorage,
-            BulkUploadService bulkUploadService,
-            DocumentIndexingService documentIndexingService) {
-        this.uploadDocumentUseCase = uploadDocumentUseCase;
+            BulkUploadUseCase bulkUploadUseCase,
+            DocumentIndexingUseCase documentIndexingUseCase,
+            DownloadDocumentUseCase downloadDocumentUseCase) {
         this.searchDocumentUseCase = searchDocumentUseCase;
         this.autocompleteUseCase = autocompleteUseCase;
         this.documentWebMapper = documentWebMapper;
-        this.documentRepository = documentRepository;
-        this.documentStorage = documentStorage;
-        this.bulkUploadService = bulkUploadService;
-        this.documentIndexingService = documentIndexingService;
+        this.bulkUploadUseCase = bulkUploadUseCase;
+        this.documentIndexingUseCase = documentIndexingUseCase;
+        this.downloadDocumentUseCase = downloadDocumentUseCase;
     }
 
     /**
@@ -91,14 +78,14 @@ public class DocumentController {
             }
 
             // Gunakan BulkUploadService yang sudah robust dengan atomic operations
-            BulkUploadService.BulkUploadCommand command = new BulkUploadService.BulkUploadCommand(
+            BulkUploadUseCase.BulkUploadCommand command = new BulkUploadUseCase.BulkUploadCommand(
                     file.getOriginalFilename(),
                     file.getBytes(),
                     file.getSize(),
                     file.getContentType(),
                     uploader);
 
-            BulkUploadService.BulkUploadResult result = bulkUploadService.uploadDocument(command);
+            BulkUploadUseCase.BulkUploadResult result = bulkUploadUseCase.uploadDocument(command);
 
             long duration = System.currentTimeMillis() - startTime;
 
@@ -150,12 +137,12 @@ public class DocumentController {
                 files.length, safeUploader);
 
         try {
-            List<BulkUploadService.BulkUploadCommand> commands = new ArrayList<>();
+            List<BulkUploadUseCase.BulkUploadCommand> commands = new ArrayList<>();
 
             // Prepare commands
             for (MultipartFile file : files) {
                 if (!file.isEmpty()) {
-                    commands.add(new BulkUploadService.BulkUploadCommand(
+                    commands.add(new BulkUploadUseCase.BulkUploadCommand(
                             file.getOriginalFilename(),
                             file.getBytes(),
                             file.getSize(),
@@ -165,7 +152,7 @@ public class DocumentController {
             }
 
             // Process bulk upload dengan atomic operations
-            List<BulkUploadService.BulkUploadResult> results = bulkUploadService.uploadMultipleDocuments(commands);
+            List<BulkUploadUseCase.BulkUploadResult> results = bulkUploadUseCase.uploadMultipleDocuments(commands);
 
             // Convert results
             BulkUploadResponse response = new BulkUploadResponse();
@@ -173,7 +160,7 @@ public class DocumentController {
             int errorCount = 0;
 
             for (int i = 0; i < results.size(); i++) {
-                BulkUploadService.BulkUploadResult result = results.get(i);
+                BulkUploadUseCase.BulkUploadResult result = results.get(i);
                 String fileName = commands.get(i).getOriginalFileName();
 
                 if (result.isSuccess()) {
@@ -198,7 +185,6 @@ public class DocumentController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
             logger.error("Bulk upload gagal", e);
 
             BulkUploadResponse errorResponse = new BulkUploadResponse();
@@ -213,11 +199,11 @@ public class DocumentController {
      * Cek status indexing untuk document tertentu
      */
     @GetMapping("/{documentId}/indexing-status")
-    public ResponseEntity<DocumentIndexingService.IndexingStatusResponse> getIndexingStatus(
+    public ResponseEntity<DocumentIndexingUseCase.IndexingStatusResponse> getIndexingStatus(
             @PathVariable String documentId) {
 
         try {
-            DocumentIndexingService.IndexingStatusResponse status = documentIndexingService
+            DocumentIndexingUseCase.IndexingStatusResponse status = documentIndexingUseCase
                     .getIndexingStatus(documentId);
 
             return ResponseEntity.ok(status);
@@ -234,7 +220,7 @@ public class DocumentController {
     public ResponseEntity<Map<String, String>> reindexDocument(@PathVariable String documentId) {
         try {
             logger.info("Memulai reindex untuk document: {}", documentId);
-            documentIndexingService.processDocumentIndexing(documentId);
+            documentIndexingUseCase.processDocumentIndexing(documentId);
 
             return ResponseEntity.ok(Map.of(
                     "status", "success",
@@ -332,33 +318,19 @@ public class DocumentController {
         logger.info("Starting document download - DocumentId: {}", documentId);
 
         try {
-            Optional<Document> documentOptional = documentRepository.findById(DocumentId.of(documentId));
-
-            if (documentOptional.isEmpty()) {
+            var resultOpt = downloadDocumentUseCase.downloadByDocumentId(documentId);
+            if (resultOpt.isEmpty()) {
                 long duration = System.currentTimeMillis() - startTime;
-                logger.warn("Document download failed - DocumentId: {} not found", documentId);
+                logger.warn("Document download failed - DocumentId: {} not found or not processed", documentId);
 
                 LoggingUtil.logApiAccess("GET", "/api/documents/download/" + documentId, "anonymous",
-                        duration, 404, "Document not found");
+                        duration, 404, "Document not found or not processed");
                 return ResponseEntity.notFound().build();
             }
 
-            Document document = documentOptional.get();
-            String safeFileName = LoggingUtil.safeFileName(document.getOriginalFileName());
-
-            // Check if document is processed (has been successfully uploaded and processed)
-            if (!document.isProcessed()) {
-                long duration = System.currentTimeMillis() - startTime;
-                logger.warn("Document download failed - DocumentId: {} not processed yet", documentId);
-
-                LoggingUtil.logApiAccess("GET", "/api/documents/download/" + documentId, "anonymous",
-                        duration, 400, "Document not processed");
-                return ResponseEntity.badRequest().build();
-            }
-
-            // Get file from MinIO using storage path
-            InputStream inputStream = documentStorage.retrieve(document.getStoragePath());
-            InputStreamResource resource = new InputStreamResource(inputStream);
+            DownloadDocumentUseCase.DownloadResult result = resultOpt.get();
+            String safeFileName = LoggingUtil.safeFileName(result.getOriginalFileName());
+            InputStreamResource resource = new InputStreamResource(result.getInputStream());
 
             long duration = System.currentTimeMillis() - startTime;
             logger.info("Document download completed - DocumentId: {}, File: {}, Duration: {}ms",
@@ -369,8 +341,8 @@ public class DocumentController {
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + document.getOriginalFileName() + "\"")
-                    .contentType(MediaType.parseMediaType(document.getContentType()))
+                            "attachment; filename=\"" + result.getOriginalFileName() + "\"")
+                    .contentType(MediaType.parseMediaType(result.getContentType()))
                     .body(resource);
 
         } catch (Exception e) {
@@ -384,81 +356,7 @@ public class DocumentController {
         }
     }
 
-    /**
-     * Debug endpoint untuk melihat dokumen yang ada di Elasticsearch
-     */
-    @GetMapping("/debug/elasticsearch")
-    public ResponseEntity<Map<String, Object>> debugElasticsearch() {
-        try {
-            Map<String, Object> debugInfo = new HashMap<>();
-
-            // Cek status Elasticsearch adapter
-            if (searchDocumentUseCase instanceof SearchDocumentService service) {
-                // Akses search engine dari service
-                java.lang.reflect.Field field = SearchDocumentService.class.getDeclaredField("searchEngine");
-                field.setAccessible(true);
-                Object searchEngine = field.get(service);
-
-                if (searchEngine instanceof ElasticsearchDocumentSearchAdapter) {
-                    // Test search dengan query sederhana untuk melihat apakah ada dokumen
-                    try {
-                        SearchDocumentUseCase.SearchQuery testQuery = new SearchDocumentUseCase.SearchQuery("*", 0, 10);
-                        SearchDocumentUseCase.SearchResponse result = searchDocumentUseCase.searchDocuments(testQuery);
-                        debugInfo.put("totalDocuments", result.getTotalHits());
-                        debugInfo.put("sampleResults", result.getResults().size());
-
-                        // Ambil sample content dari hasil pencarian
-                        List<Map<String, Object>> sampleDocs = new ArrayList<>();
-                        for (int i = 0; i < Math.min(3, result.getResults().size()); i++) {
-                            var searchResult = result.getResults().get(i);
-                            Map<String, Object> docInfo = new HashMap<>();
-                            docInfo.put("documentId", searchResult.getDocumentId().getValue());
-                            docInfo.put("fileName", searchResult.getFileName());
-                            docInfo.put("contentPreview", searchResult.getHighlightedContent().substring(0,
-                                    Math.min(100, searchResult.getHighlightedContent().length())));
-                            docInfo.put("score", searchResult.getScore());
-                            if (searchResult.isPaged()) {
-                                docInfo.put("page", searchResult.getPageNumber());
-                            }
-                            sampleDocs.add(docInfo);
-                        }
-                        debugInfo.put("sampleDocuments", sampleDocs);
-
-                    } catch (Exception e) {
-                        debugInfo.put("searchError", e.getMessage());
-                    }
-                }
-            }
-
-            // Cek dokumen di database
-            try {
-                List<Document> allDocs = documentRepository.findAll();
-                debugInfo.put("totalInDatabase", allDocs.size());
-
-                List<Map<String, Object>> dbDocs = new ArrayList<>();
-                for (int i = 0; i < Math.min(3, allDocs.size()); i++) {
-                    Document doc = allDocs.get(i);
-                    Map<String, Object> docInfo = new HashMap<>();
-                    docInfo.put("id", doc.getId().getValue());
-                    docInfo.put("fileName", doc.getFileName());
-                    docInfo.put("isProcessed", doc.isProcessed());
-                    docInfo.put("uploadedAt", doc.getUploadedAt().toString());
-                    dbDocs.add(docInfo);
-                }
-                debugInfo.put("sampleDbDocuments", dbDocs);
-
-            } catch (Exception e) {
-                debugInfo.put("databaseError", e.getMessage());
-            }
-
-            return ResponseEntity.ok(debugInfo);
-
-        } catch (Exception e) {
-            Map<String, Object> errorInfo = new HashMap<>();
-            errorInfo.put("error", "Failed to get debug info: " + e.getMessage());
-            return ResponseEntity.status(500).body(errorInfo);
-        }
-    }
+    // Debug endpoint dihapus untuk menjaga batasan layer web terhadap domain ports saja
 
     // Response DTOs
     public static class UploadResponse {

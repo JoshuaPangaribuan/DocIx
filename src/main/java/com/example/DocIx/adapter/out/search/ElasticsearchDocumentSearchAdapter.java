@@ -110,13 +110,13 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             try {
                 DocumentPageDocument pageDoc = new DocumentPageDocument(
                         String.valueOf(page.getDocumentId()),
-                        "",
-                        "",
+                        null,
+                        null,
                         page.getContent(),
                         page.getPageNumber(),
-                        "",
-                        "",
-                        "");
+                        null,
+                        null,
+                        null);
 
                 String pageId = page.getDocumentId() + "_page_" + page.getPageNumber();
 
@@ -255,18 +255,14 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             if (!indexExists) {
                 elasticsearchClient.indices().create(c -> c
                         .index(PAGES_INDEX_NAME)
-                        .settings(s -> s
-                                .analysis(a -> a
-                                        .analyzer("indonesian_analyzer", an -> an
-                                                .standard(std -> std))))
                         .mappings(m -> m
                                 .properties("documentId", p -> p.keyword(k -> k))
                                 .properties("fileName", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
+                                        .text(t -> t.analyzer("standard")))
                                 .properties("originalFileName", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
+                                        .text(t -> t.analyzer("standard")))
                                 .properties("content", p -> p
-                                        .text(t -> t.analyzer("english_analyzer")))
+                                        .text(t -> t.analyzer("standard")))
                                 .properties("pageNumber", p -> p.integer(i -> i))
                                 .properties("uploader", p -> p.keyword(k -> k))
                                 .properties("uploadedAt", p -> p.date(d -> d))
@@ -284,6 +280,8 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
      */
     @Override
     public void indexDocumentPage(PageExtractor.DocumentPage page) {
+        // Ensure index exists with correct mappings before indexing
+        createPagesIndexIfNotExists();
         indexDocumentPageWithRetry(page, 3);
     }
 
@@ -314,7 +312,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
                         page.getContent(),
                         page.getPageNumber(),
                         document.getUploader(),
-                        document.getUploadedAt().toString(),
+                        document.getUploadedAt() != null ? document.getUploadedAt().toString() : null,
                         document.getDownloadUrl());
 
                 String pageId = page.getDocumentId() + "_page_" + page.getPageNumber();
