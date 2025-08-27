@@ -1,12 +1,21 @@
 package com.example.DocIx.adapter.out.search;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
 import com.example.DocIx.domain.model.Document;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
-import com.example.DocIx.domain.port.out.DocumentSearchEngine.SearchResult;
 import com.example.DocIx.domain.port.out.PageExtractor;
-
 import com.example.DocIx.domain.util.LoggingUtil;
+
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
@@ -19,19 +28,8 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.Tags;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.LinkedHashMap;
 
 @Component
 public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine {
@@ -84,8 +82,6 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             logger.warn("Warning: Failed to initialize Elasticsearch indices: {}", e.getMessage());
         }
     }
-
-
 
     @Override
     public void indexDocument(Document document) {
@@ -241,10 +237,6 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
         }
     }
 
-
-
-
-
     /**
      * Create the document_pages index with proper mapping
      */
@@ -289,7 +281,7 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
      * Index a document as pages for page-based indexing
      * 
      * @param document The document to index
-     * @param pages List of DocumentPage objects to index separately
+     * @param pages    List of DocumentPage objects to index separately
      */
     public void indexDocumentPages(Document document, List<PageExtractor.DocumentPage> pages) {
         try {
@@ -638,8 +630,6 @@ public class ElasticsearchDocumentSearchAdapter implements DocumentSearchEngine 
             return false;
         }
     }
-
-
 
     /**
      * Inner class for Elasticsearch page document structure

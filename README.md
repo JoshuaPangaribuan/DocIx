@@ -352,10 +352,6 @@ src/
 
 # Integration tests
 ./gradlew integrationTest
-
-# Test graceful shutdown
-./test-graceful-shutdown.bat  # Windows
-./test-graceful-shutdown.sh   # Linux/Mac
 ```
 
 ## 🐳 Docker Deployment
@@ -465,19 +461,50 @@ spec:
 
 DocIx mendukung graceful shutdown yang memastikan:
 
-- ✅ Task processing selesai sebelum shutdown
+- ✅ Task processing selesai sebelum shutdown (dengan timeout 30 detik)
 - ✅ Database connections ditutup dengan proper
 - ✅ Message queue acknowledgments diproses
 - ✅ File operations diselesaikan
+- ✅ Active processing tasks dilacak melalui system status endpoint
 
-Konfigurasi utama:
+### Konfigurasi Graceful Shutdown
+
+Graceful shutdown dikonfigurasi melalui Spring Boot properties:
+
 ```properties
+# Graceful shutdown configuration
 server.shutdown=graceful
 spring.lifecycle.timeout-per-shutdown-phase=30s
 management.endpoint.shutdown.enabled=true
 ```
 
-Lihat [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md) untuk detail lengkap.
+### Monitoring Active Tasks
+
+Aplikasi menyediakan endpoint untuk monitoring active tasks:
+
+- **System Status**: `/api/system/status` - Menampilkan status aplikasi dan jumlah active processing tasks
+- **Readiness Check**: `/api/system/health/ready` - Readiness probe yang menyertakan informasi active tasks
+
+### Cara Melakukan Graceful Shutdown
+
+1. **Via Actuator Endpoint** (Production):
+   ```bash
+   curl -X POST http://localhost:8080/actuator/shutdown
+   ```
+
+2. **Via SIGTERM Signal** (Docker/Kubernetes):
+   ```bash
+   docker stop container_name  # Mengirim SIGTERM
+   ```
+
+### Shutdown Process
+
+Ketika graceful shutdown dipicu:
+
+1. **Stop Accepting New Requests**: Server berhenti menerima request baru
+2. **Complete Active Processing**: Menunggu hingga active processing tasks selesai (max 30s)
+3. **Close Resources**: Menutup database connections, message queue connections, dll.
+4. **Application Exit**: Aplikasi keluar dengan status code 0
 
 ## 📊 Monitoring
 
