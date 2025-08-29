@@ -19,12 +19,25 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # DocIx Application
-  - job_name: 'docix-app'
+  # DocIx Application - Development mode (standalone app on port 8082)
+  - job_name: 'docix-app-dev'
     static_configs:
-      - targets: ['docix-app:8080']
+      - targets: ['host.docker.internal:8082']
     metrics_path: '/actuator/prometheus'
     scrape_interval: 30s
+
+  # DocIx Application - Production mode (containerized app on port 8081)
+  - job_name: 'docix-app-prod'
+    static_configs:
+      - targets: ['host.docker.internal:8081', 'docix-application:8080']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 30s
+
+  # OpenTelemetry Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    scrape_interval: 15s
 
   # System metrics
   - job_name: 'node-exporter'

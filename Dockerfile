@@ -16,7 +16,7 @@ COPY src/ src/
 RUN gradle build -x test --no-daemon
 
 # Stage 2: Runtime stage
-FROM openjdk:21-jre-slim
+FROM eclipse-temurin:21-jre
 
 LABEL maintainer="DocIx Team"
 LABEL description="DocIx - Document Indexer Search Engine"

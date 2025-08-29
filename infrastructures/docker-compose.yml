@@ -132,26 +132,26 @@ services:
     container_name: docix-application
     environment:
       # Database Configuration
-      DATABASE_URL: jdbc:postgresql://postgres:5432/docix
+      DATABASE_URL: jdbc:postgresql://docix-postgres:5432/docix
       DATABASE_DRIVER: org.postgresql.Driver
       DATABASE_USERNAME: docix_user
       DATABASE_PASSWORD: docix_password
       DATABASE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
 
       # Elasticsearch Configuration
-      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_URL: http://docix-elasticsearch:9200
 
       # MinIO Configuration
-      MINIO_URL: http://minio:9000
+      MINIO_URL: http://docix-minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: docix-documents
 
       # RabbitMQ Configuration
-      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_HOST: docix-rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: guest
-      RABBITMQ_PASSWORD: guest
+      RABBITMQ_USERNAME: docix_user
+      RABBITMQ_PASSWORD: docix_password
 
       # Document Processing Configuration
       DOCIX_PROCESSING_QUEUE_NAME: document.processing

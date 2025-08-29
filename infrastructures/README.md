@@ -13,6 +13,13 @@ This directory contains all the infrastructure configuration files for the DocIx
 ### Optional Services
 - **Kibana 8.12**: Elasticsearch monitoring and visualization dashboard
 
+### Monitoring Services
+- **Prometheus**: Metrics collection and monitoring system
+- **Grafana**: Visualization and dashboards for metrics
+- **Node Exporter**: System metrics collection
+- **cAdvisor**: Container metrics collection
+- **Elasticsearch Exporter**: Elasticsearch metrics for Prometheus
+
 ## Configuration Details
 
 Based on `application.properties`, the services are configured as follows:
@@ -52,11 +59,14 @@ Based on `application.properties`, the services are configured as follows:
 
 ### Development Environment
 ```bash
-# Start all development services
+# Start all development services (including monitoring)
 docker-compose -f docker-compose.dev.yml up -d
 
 # Start specific services only
 docker-compose -f docker-compose.dev.yml up -d postgres-dev minio-dev
+
+# Start only monitoring services
+docker-compose -f docker-compose.dev.yml up -d prometheus grafana node-exporter cadvisor elasticsearch-exporter
 
 # View logs
 docker-compose -f docker-compose.dev.yml logs -f
@@ -86,11 +96,15 @@ When running locally:
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| DocIx Application | http://localhost:8081 | Main application |
+| DocIx Application | http://localhost:8082 | Main application |
 | MinIO Console | http://localhost:9001 | Object storage management |
 | RabbitMQ Management | http://localhost:15672 | Message queue monitoring |
 | Elasticsearch | http://localhost:9200 | Search engine API |
 | Kibana | http://localhost:5601 | Elasticsearch dashboard |
+| Prometheus | http://localhost:9090 | Metrics collection system |
+| Grafana | http://localhost:3000 | Monitoring dashboards |
+| Jaeger | http://localhost:16686 | Distributed tracing |
+| cAdvisor | http://localhost:8080 | Container metrics |
 | PostgreSQL | localhost:5432 | Database connection |
 
 ## Environment Variables
@@ -128,6 +142,14 @@ RABBITMQ_PASSWORD=guest
 DOCIX_PROCESSING_QUEUE_NAME=document.processing
 DOCIX_PROCESSING_EXCHANGE_NAME=document.exchange
 DOCIX_PROCESSING_ROUTING_KEY=document.process
+```
+
+### Monitoring
+```env
+PROMETHEUS_URL=http://localhost:9090
+GRAFANA_URL=http://localhost:3000
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=docix123
 ```
 
 ## Health Checks
@@ -204,6 +226,23 @@ curl http://localhost:9200/_cat/indices
 
 # Check queues
 curl http://guest:guest@localhost:15672/api/queues
+```
+
+#### Monitoring Services
+```bash
+# Access Prometheus at http://localhost:9090
+# Check Prometheus targets
+curl http://localhost:9090/api/v1/targets
+
+# Access Grafana at http://localhost:3000
+# Default credentials: admin / docix123
+
+# Check cAdvisor metrics at http://localhost:8080
+# Check Node Exporter metrics
+curl http://localhost:9100/metrics
+
+# Check Elasticsearch Exporter metrics
+curl http://localhost:9114/metrics
 ```
 
 ## Production Considerations

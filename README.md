@@ -526,6 +526,18 @@ Ketika graceful shutdown dipicu:
 - Mendukung ekspor ke berbagai backend observability yang kompatibel dengan OTLP (Jaeger, Zipkin, dll.)
 - Konfigurasi endpoint OTLP: `observability.otlp.endpoint` (default: http://localhost:4317)
 
+## Observability & Monitoring Services
+
+The development environment includes a comprehensive observability stack:
+
+- **OpenTelemetry Collector**: Collects, processes, and exports telemetry data
+- **Jaeger**: Distributed tracing visualization and analysis
+- **Prometheus**: Metrics collection and storage
+- **Grafana**: Metrics visualization and dashboards
+- **Node Exporter**: System metrics collection
+- **cAdvisor**: Container metrics collection
+- **Elasticsearch Exporter**: Elasticsearch metrics collection
+
 ### Logging
 
 Logs tersedia dalam format structured dengan level:
