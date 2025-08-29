@@ -1,6 +1,7 @@
 package com.example.DocIx.domain.port.out;
 
 import com.example.DocIx.domain.model.Document;
+import com.example.DocIx.domain.model.IndexingPageLog;
 import com.example.DocIx.domain.model.DocumentId;
 
 import java.util.List;

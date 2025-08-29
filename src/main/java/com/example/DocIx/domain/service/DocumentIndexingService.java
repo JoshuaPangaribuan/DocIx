@@ -20,7 +20,6 @@ import com.example.DocIx.domain.model.IndexingLog;
 import com.example.DocIx.domain.model.IndexingStatus;
 import com.example.DocIx.domain.model.PageStatus;
 import com.example.DocIx.domain.port.in.DocumentIndexingUseCase;
-import com.example.DocIx.domain.port.out.ContentExtractor;
 import com.example.DocIx.domain.port.out.DocumentRepository;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
 import com.example.DocIx.domain.port.out.DocumentStorage;
@@ -53,7 +52,6 @@ public class DocumentIndexingService implements DocumentIndexingUseCase {
             IndexingLogRepository indexingLogRepository,
             IndexingPageLogJpaRepository pageLogRepository,
             DocumentStorage documentStorage,
-            ContentExtractor contentExtractor,
             PageExtractor pageExtractor,
             DocumentSearchEngine searchEngine) {
         this.documentRepository = documentRepository;

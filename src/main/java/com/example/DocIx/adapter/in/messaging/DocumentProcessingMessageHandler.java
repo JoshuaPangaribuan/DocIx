@@ -1,7 +1,7 @@
 package com.example.DocIx.adapter.in.messaging;
 
 import com.example.DocIx.adapter.out.messaging.RabbitMQDocumentProcessingPublisher.DocumentProcessingMessage;
-import com.example.DocIx.domain.service.DocumentIndexingService;
+import com.example.DocIx.domain.port.in.DocumentIndexingUseCase;
 import com.example.DocIx.domain.util.LoggingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,13 +18,13 @@ public class DocumentProcessingMessageHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentProcessingMessageHandler.class);
 
-    private final DocumentIndexingService documentIndexingService;
+    private final DocumentIndexingUseCase documentIndexingUseCase;
 
     // Track active processing tasks for graceful shutdown
     private final AtomicInteger activeProcessingTasks = new AtomicInteger(0);
 
-    public DocumentProcessingMessageHandler(DocumentIndexingService documentIndexingService) {
-        this.documentIndexingService = documentIndexingService;
+    public DocumentProcessingMessageHandler(DocumentIndexingUseCase documentIndexingUseCase) {
+        this.documentIndexingUseCase = documentIndexingUseCase;
     }
 
     @RabbitListener(queues = "${docix.processing.queue.name}")
@@ -39,8 +39,8 @@ public class DocumentProcessingMessageHandler {
             logger.info("Memulai pemrosesan dokumen asinkron: {}", documentId);
             LoggingUtil.logPerformance("document_processing_start", documentId);
 
-            // Proses indexing menggunakan DocumentIndexingService yang baru
-            documentIndexingService.processDocumentIndexing(documentId);
+            // Proses indexing menggunakan DocumentIndexingUseCase
+            documentIndexingUseCase.processDocumentIndexing(documentId);
 
             LoggingUtil.logPerformance("document_processing_complete", documentId);
             logger.info("Pemrosesan dokumen selesai: {}", documentId);

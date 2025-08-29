@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.example.DocIx.domain.model.Document;
+import com.example.DocIx.domain.model.IndexingPageLog;
 import com.example.DocIx.domain.model.DocumentId;
 import com.example.DocIx.domain.port.out.DocumentSearchEngine;
 import com.example.DocIx.domain.port.out.PageExtractor;
